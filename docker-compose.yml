@@ -1,0 +1,20 @@
+services:
+  videogen:
+    image: ghcr.io/izzdiin/videogen:latest
+    container_name: videogen
+    restart: unless-stopped
+    ports:
+      - "3201:3201"
+    environment:
+      - PORT=3201
+      - DATA_DIR=/app/data
+      - NINEROUTER_BASE_URL=${NINEROUTER_BASE_URL:-http://192.168.11.11:20128/v1}
+      - NINEROUTER_API_KEY=${NINEROUTER_API_KEY:-}
+      - CF_AI_TOKEN=${CF_AI_TOKEN:-}
+      - CF_ACCOUNT_ID=${CF_ACCOUNT_ID:-b0ce11cc6927f6af77eee206f5416eac}
+      - MUSE_BRIDGE_BASE_URL=${MUSE_BRIDGE_BASE_URL:-http://192.168.11.11:8765/v1}
+      - MUSE_BRIDGE_KEY=${MUSE_BRIDGE_KEY:-}
+    volumes:
+      - ./data:/app/data
+      - ./stickman-runtime/assets:/app/stickman-runtime/assets
+      - ./public/fonts:/app/public/fonts

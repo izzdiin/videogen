@@ -1,0 +1,10 @@
+node_modules/
+.next/
+data/
+.env
+*.bak*
+*.log
+stickman-runtime/assets/**
+!stickman-runtime/assets/.gitkeep
+public/fonts/**
+!public/fonts/.gitkeep

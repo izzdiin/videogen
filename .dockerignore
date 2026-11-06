@@ -1,0 +1,10 @@
+.git
+.github
+data
+.env
+node_modules
+.next
+*.bak*
+*.log
+stickman-runtime/assets
+public/fonts
