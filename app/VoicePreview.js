@@ -4,10 +4,10 @@ import { useState } from "react";
 export default function VoicePreview({ voice, provider = "edge-tts" }) {
   const [show, setShow] = useState(false);
   if (!voice) return null;
-  const isGemini = provider === "gemini-tts";
-  const src = isGemini
-    ? `/api/voice-preview?voice=${encodeURIComponent(voice)}&provider=gemini-tts`
-    : `/api/voice-preview?voice=${encodeURIComponent(voice)}`;
+  const src =
+    provider === "edge-tts"
+      ? `/api/voice-preview?voice=${encodeURIComponent(voice)}`
+      : `/api/voice-preview?voice=${encodeURIComponent(voice)}&provider=${encodeURIComponent(provider)}`;
   return (
     <span className="mt-2 block">
       <button
