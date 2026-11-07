@@ -2,8 +2,8 @@ import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import { loadProject, saveProject, projectDir } from "../../../../../../../lib/store.js";
-import { synthesize, synthesizeGemini, synthesizeClaude, probeDuration } from "../../../../../../../lib/tts.js";
-import { isGeminiVoice, defaultGeminiVoice, isClaudeVoice, defaultClaudeVoice } from "../../../../../../../lib/voices.js";
+import { synthesize, synthesizeGemini, synthesizeClaude, synthesizeElevenLabs, probeDuration } from "../../../../../../../lib/tts.js";
+import { isGeminiVoice, defaultGeminiVoice, isClaudeVoice, defaultClaudeVoice, isElevenLabsVoice, defaultElevenLabsVoice } from "../../../../../../../lib/voices.js";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +48,10 @@ export async function POST(req, { params }) {
         const voice = isGeminiVoice(project.executors.voice) ? project.executors.voice : defaultGeminiVoice();
         const { duration } = await synthesizeGemini(scene.narration, voice, abs);
         scene.vo = { status: "ready", file: rel, duration, source: "gemini-tts", updatedAt: new Date().toISOString() };
+      } else if ((project.executors.voProvider || "edge-tts") === "elevenlabs") {
+        const voice = isElevenLabsVoice(project.executors.voice) ? project.executors.voice : defaultElevenLabsVoice();
+        const { duration } = await synthesizeElevenLabs(scene.narration, voice, abs);
+        scene.vo = { status: "ready", file: rel, duration, source: "elevenlabs", updatedAt: new Date().toISOString() };
       } else {
         const { duration } = await synthesize(
           scene.narration,

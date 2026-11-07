@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { VOICES, GEMINI_VOICES, MUSE_VOICES, defaultVoice, defaultGeminiVoice, defaultClaudeVoice } from "../lib/voices.js";
+import { VOICES, GEMINI_VOICES, MUSE_VOICES, ELEVENLABS_VOICES, defaultVoice, defaultGeminiVoice, defaultClaudeVoice, defaultElevenLabsVoice } from "../lib/voices.js";
 import { VISUAL_STYLES } from "../lib/visualStyles.js";
 import ModelPicker from "./ModelPicker.js";
 import VoicePreview from "./VoicePreview.js";
@@ -21,12 +21,12 @@ export default function CreateForm() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (voProvider !== "gemini-tts" && voProvider !== "muse-bridge") setVoice(defaultVoice(audience));
+    if (voProvider !== "gemini-tts" && voProvider !== "muse-bridge" && voProvider !== "elevenlabs") setVoice(defaultVoice(audience));
   }, [audience]);
 
   function changeVoProvider(p) {
     setVoProvider(p);
-    setVoice(p === "gemini-tts" ? defaultGeminiVoice() : p === "muse-bridge" ? defaultClaudeVoice() : defaultVoice(audience));
+    setVoice(p === "gemini-tts" ? defaultGeminiVoice() : p === "muse-bridge" ? defaultClaudeVoice() : p === "elevenlabs" ? defaultElevenLabsVoice() : defaultVoice(audience));
   }
 
   async function submit(e) {
@@ -127,16 +127,32 @@ export default function CreateForm() {
           <option value="edge-tts">edge-tts (otomatis)</option>
           <option value="gemini-tts">Gemini TTS via 9Router (lebih ekspresif)</option>
           <option value="muse-bridge">Muse (bridge) — dibacakan Muse, tanpa kuota</option>
+          <option value="elevenlabs">ElevenLabs</option>
           <option value="upload">Unggah manual per scene</option>
         </select>
       </div>
       <div>
         <label className={labelCls}>Suara voice over</label>
         <select value={voice} onChange={(e) => setVoice(e.target.value)} className={inputCls}>
-          {(voProvider === "gemini-tts" ? GEMINI_VOICES : voProvider === "muse-bridge" ? MUSE_VOICES : VOICES[audience]).map((v) => (
-            <option key={v.id} value={v.id}>{v.label}</option>
-          ))}
+          {(() => {
+            const list = voProvider === "gemini-tts" ? GEMINI_VOICES : voProvider === "muse-bridge" ? MUSE_VOICES : voProvider === "elevenlabs" ? ELEVENLABS_VOICES : VOICES[audience];
+            const opts = list.map((v) => (
+              <option key={v.id} value={v.id}>{v.label}</option>
+            ));
+            if (voProvider === "elevenlabs" && voice && !ELEVENLABS_VOICES.some((v) => v.id === voice)) {
+              opts.unshift(<option key="custom" value={voice}>Suara kustom ({voice})</option>);
+            }
+            return opts;
+          })()}
         </select>
+        {voProvider === "elevenlabs" && (
+          <input
+            value={ELEVENLABS_VOICES.some((v) => v.id === voice) ? "" : (voice || "")}
+            onChange={(e) => { const v = e.target.value.trim(); setVoice(v || defaultElevenLabsVoice()); }}
+            placeholder="ID suara kustom (mis. hasil kloning) — kosongkan untuk suara bawaan"
+            className={inputCls + " mt-2"}
+          />
+        )}
         <VoicePreview voice={voice} provider={voProvider} />
       </div>
       <div>
