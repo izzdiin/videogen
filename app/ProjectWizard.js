@@ -19,7 +19,8 @@ const STICK_POSES = [[0, "Mencondong / berpikir"], [1, "Berdiri menyajikan"], [2
 const STICK_SFX = [["", "Tanpa efek"], ["pop", "Pop"], ["tap", "Tap"], ["paper", "Kertas"], ["chime", "Chime"]];
 const DC_KINDS = [["hook", "Pembuka (hook)"], ["problem", "Masalah"], ["result", "Hasil / rekap"]];
 const DG_BADGES = [["green", "Hijau (aman / berhasil)"], ["orange", "Oranye (aktif / proses)"], ["red", "Merah (bahaya / peringatan)"], ["blue", "Biru (info)"], ["grey", "Abu (netral)"]];
-const DG_COMPS = [["hp", "HP / ponsel"], ["bts", "Menara BTS"], ["server", "Server"], ["monitor", "Monitor / layar"], ["router", "Router"], ["cloud", "Cloud"], ["database", "Database"], ["orang", "Orang / pengguna"], ["rumah", "Rumah"], ["gembok", "Gembok / enkripsi"], ["chat", "Chat / pesan"], ["dokumen", "Dokumen"], ["kotak", "Kotak berlabel (umum)"], ["panel-surya", "Panel surya"], ["baterai", "Baterai"], ["bank", "Bank / gedung bank"], ["globe", "Globe / internet"], ["satelit", "Satelit"], ["mobil", "Mobil"], ["lampu", "Lampu / tiang lampu"]];
+const DG_COMPS = [["hp", "HP / ponsel"], ["bts", "Menara BTS"], ["server", "Server"], ["monitor", "Monitor / layar"], ["router", "Router"], ["cloud", "Cloud"], ["database", "Database"], ["orang", "Orang / pengguna"], ["rumah", "Rumah"], ["gembok", "Gembok / enkripsi"], ["chat", "Chat / pesan"], ["dokumen", "Dokumen"], ["kotak", "Kotak berlabel (umum)"], ["panel-surya", "Panel surya"], ["baterai", "Baterai"], ["bank", "Bank / gedung bank"], ["globe", "Globe / internet"], ["satelit", "Satelit"], ["mobil", "Mobil"], ["lampu", "Lampu / tiang lampu"], ["panah-panas", "Panah panas naik (Bedah)"], ["aliran", "Putaran aliran udara (Bedah)"]];
+const DG_FLOWS = [["panas", "Panas (oranye-merah)"], ["aliran", "Aliran (teal)"], ["netral", "Netral (abu)"]];
 const DG_CABLES = [["blue", "Biru (alur normal)"], ["gold", "Emas (data disalin)"], ["red", "Merah (bahaya)"], ["green", "Hijau (aman)"], ["grey", "Abu (netral)"]];
 const DG_STEPS = [["todo", "… belum"], ["ask", "? diproses / ditanya"], ["ok", "✓ selesai / disetujui"], ["bad", "✗ gagal / ditolak"]];
 const ENGINE_LABEL = { darkcard: "Dark Card", slides: "Slides", diagram: "Diagram", editorial: "Editorial" };
@@ -136,6 +137,14 @@ export default function ProjectWizard({ initial }) {
   const [dcCfg, setDcCfg] = useState(initial.darkcard || { watermark: "", accent: "#F26D8D" });
   const [dgCfg, setDgCfg] = useState(initial.diagram || { watermark: "", accent: "#E4572E" });
   const [edCfg, setEdCfg] = useState(initial.editorial || { watermark: "", accent: "#E94F1E" });
+  const [slCfg, setSlCfg] = useState({
+    captionStyle: initial.captionStyle || "frasa",
+    scriptTemplate: initial.scriptTemplate || "",
+    poll: {
+      question: initial.poll?.question || "",
+      options: [0, 1, 2].map((k) => (initial.poll?.options || [])[k] || ""),
+    },
+  });
   const [stickStyle, setStickStyle] = useState(initial.stickStyle || "B1");
   const [visualStyle, setVisualStyle] = useState(initial.visualStyle || "bebas");
   const [dirty, setDirty] = useState(false);
@@ -238,6 +247,16 @@ export default function ProjectWizard({ initial }) {
       const data = await jsonFetch(`/api/projects/${id}`, "PATCH", { editorial: edCfg });
       setProject(data.project);
       setEdCfg(data.project.editorial || edCfg);
+    });
+
+  const saveSl = () =>
+    call("saveSl", async () => {
+      const data = await jsonFetch(`/api/projects/${id}`, "PATCH", {
+        captionStyle: slCfg.captionStyle,
+        scriptTemplate: slCfg.scriptTemplate,
+        poll: { question: slCfg.poll.question, options: slCfg.poll.options.map((o) => String(o || "").trim()) },
+      });
+      setProject(data.project);
     });
 
   const saveStick = () =>
@@ -545,6 +564,46 @@ export default function ProjectWizard({ initial }) {
               </select>
               <p className="mt-1 text-xs text-white/40">Tema gelap memakai diagram pucat di atas kanvas gelap; komponen dan warna kabel tetap sama.</p>
             </div>
+            <div>
+              <label className={labelCls}>Mode Diagram</label>
+              <select value={dgCfg.mode || "akumulasi"} onChange={(e) => setDgCfg({ ...dgCfg, mode: e.target.value })} className={inputCls}>
+                <option value="akumulasi">Akumulasi — satu diagram dibangun bertahap</option>
+                <option value="bedah">Bedah — halaman per scene + kartu angka besar</option>
+              </select>
+              <p className="mt-1 text-xs text-white/40">Bedah: tiap scene halaman sendiri (headline + kartu data + diagram subjek + panah aliran + caption kata kunci); watermark tampil sebagai pil di kanan atas. Setelah ganti mode, buat ulang naskah agar format scene-nya sesuai.</p>
+            </div>
+          </div>
+        )}
+        {project.engine === "slides" && (
+          <div className="mt-4 border-t border-white/10 pt-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className={labelCls}>Gaya caption</label>
+                <select value={slCfg.captionStyle} onChange={(e) => setSlCfg({ ...slCfg, captionStyle: e.target.value })} className={inputCls}>
+                  <option value="frasa">Frasa — kotak subtitle di bawah</option>
+                  <option value="satukata">Satu Kata — kata raksasa per ketukan, satu kata lime</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Template naskah</label>
+                <select value={slCfg.scriptTemplate} onChange={(e) => setSlCfg({ ...slCfg, scriptTemplate: e.target.value })} className={inputCls}>
+                  <option value="">Standar</option>
+                  <option value="andai">Andai-Andai — "gimana kalau..." langkah demi langkah</option>
+                </select>
+                <p className="mt-1 text-xs text-white/40">Template berlaku saat naskah dibuat ulang.</p>
+              </div>
+            </div>
+            <div className="mt-3">
+              <label className={labelCls}>Kartu polling penutup (kosongkan pertanyaan untuk menonaktifkan)</label>
+              <input value={slCfg.poll.question} onChange={(e) => setSlCfg({ ...slCfg, poll: { ...slCfg.poll, question: e.target.value } })} placeholder="mis. MANA YANG PALING FATAL?" className={inputCls} />
+              <div className="mt-2 grid gap-2 md:grid-cols-3">
+                {[0, 1, 2].map((k) => (
+                  <input key={k} value={slCfg.poll.options[k] || ""} onChange={(e) => { const options = [...slCfg.poll.options]; options[k] = e.target.value; setSlCfg({ ...slCfg, poll: { ...slCfg.poll, options } }); }} placeholder={`Pilihan ${k + 1} (maks 3 kata)`} className={inputCls} />
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-white/40">Kartu 6 detik di akhir video: pertanyaan + pil "+ FOLLOW" + pilihan + ajakan komentar. Naskah baru selalu menyarankan isinya.</p>
+            </div>
+            <button onClick={saveSl} disabled={busy === "saveSl"} className={`${btnCls} mt-3`}>Simpan caption, template & polling</button>
           </div>
         )}
         {project.engine === "editorial" && (
@@ -698,6 +757,52 @@ export default function ProjectWizard({ initial }) {
                 </div>
               ) : project.engine === "diagram" ? (
                 <div className="mt-3">
+                  {(dgCfg.mode || "akumulasi") === "bedah" && (
+                    <div className="mb-3 rounded-lg border border-amber-400/30 bg-black/20 p-3">
+                      <div className="text-xs font-semibold text-amber-300">Mode Bedah — halaman scene ini</div>
+                      <div className="mt-2 grid gap-3 md:grid-cols-2">
+                        <div>
+                          <label className={labelCls}>Kata kunci caption (satu kata dari narasi, disorot kuning)</label>
+                          <input value={s.dg?.keyword || ""} onChange={(e) => editDg(i, "keyword", e.target.value)} placeholder="mis. oven" className={inputCls} />
+                        </div>
+                        <div>
+                          <label className={labelCls}>Catatan</label>
+                          <p className="text-xs text-white/50">Di mode Bedah: label komponen = pil penunjuk; tombol "+ Panah aliran" ada di Perintah diagram; kolom tracker & kartu data terminal tidak dipakai.</p>
+                        </div>
+                      </div>
+                      {[0, 1].map((k) => {
+                        const d = (Array.isArray(s.dg?.data) ? s.dg.data : [])[k] || { label: "", value: "", result: "", tone: "plain" };
+                        const setData = (patch) => {
+                          const arr = [...(Array.isArray(s.dg?.data) ? s.dg.data : [])];
+                          arr[k] = { label: "", value: "", result: "", tone: "plain", ...((Array.isArray(s.dg?.data) ? s.dg.data : [])[k] || {}), ...patch };
+                          editDg(i, "data", arr);
+                        };
+                        return (
+                          <div key={k} className="mt-2 grid gap-2 md:grid-cols-4">
+                            <div>
+                              <label className={labelCls}>Kartu {k + 1} — label kecil</label>
+                              <input value={d.label || ""} onChange={(e) => setData({ label: e.target.value })} placeholder="mis. ATAP LOGAM · SIANG" className={inputCls} />
+                            </div>
+                            <div>
+                              <label className={labelCls}>Kartu {k + 1} — angka besar</label>
+                              <input value={d.value || ""} onChange={(e) => setData({ value: e.target.value })} placeholder="mis. >59 °C" className={inputCls} />
+                            </div>
+                            <div>
+                              <label className={labelCls}>Kartu {k + 1} — baris hasil (highlight kuning)</label>
+                              <input value={d.result || ""} onChange={(e) => setData({ result: e.target.value })} placeholder="mis. bisa 60 °C lebih" className={inputCls} />
+                            </div>
+                            <div>
+                              <label className={labelCls}>Kartu {k + 1} — nada angka</label>
+                              <select value={d.tone || "plain"} onChange={(e) => setData({ tone: e.target.value })} className={inputCls}>
+                                <option value="plain">Biasa (hitam)</option>
+                                <option value="hot">Panas (merah)</option>
+                              </select>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   <div className="grid gap-3 md:grid-cols-2">
                     <div>
                       <label className={labelCls}>Kata aksen headline (diwarnai, harus ada di headline)</label>
@@ -750,17 +855,21 @@ export default function ProjectWizard({ initial }) {
                       <button type="button" onClick={() => editDg(i, "ops", [...(Array.isArray(s.dg?.ops) ? s.dg.ops : []), { op: "add", comp: "kotak", id: "", label: "" }])} className={btnCls}>+ Komponen</button>
                       <button type="button" onClick={() => editDg(i, "ops", [...(Array.isArray(s.dg?.ops) ? s.dg.ops : []), { op: "connect", from: "", to: "", color: "blue" }])} className={btnCls}>+ Kabel</button>
                       <button type="button" onClick={() => editDg(i, "ops", [...(Array.isArray(s.dg?.ops) ? s.dg.ops : []), { op: "focus", target: "all" }])} className={btnCls}>+ Fokus</button>
+                      {(dgCfg.mode || "akumulasi") === "bedah" && (
+                        <button type="button" onClick={() => editDg(i, "ops", [...(Array.isArray(s.dg?.ops) ? s.dg.ops : []), { op: "flow", from: "", to: "", kind: "aliran" }])} className={btnCls}>+ Panah aliran</button>
+                      )}
                     </div>
                     {(Array.isArray(s.dg?.ops) ? s.dg.ops : []).map((op, k) => {
                       const ops = Array.isArray(s.dg?.ops) ? s.dg.ops : [];
                       const setOp = (patch) => { const next = [...ops]; next[k] = { ...next[k], ...patch }; editDg(i, "ops", next); };
-                      const setType = (t) => { const next = [...ops]; next[k] = t === "add" ? { op: "add", comp: "kotak", id: "", label: "" } : t === "connect" ? { op: "connect", from: "", to: "", color: "blue" } : { op: "focus", target: "all" }; editDg(i, "ops", next); };
+                      const setType = (t) => { const next = [...ops]; next[k] = t === "add" ? { op: "add", comp: "kotak", id: "", label: "" } : t === "connect" ? { op: "connect", from: "", to: "", color: "blue" } : t === "flow" ? { op: "flow", from: "", to: "", kind: "aliran" } : { op: "focus", target: "all" }; editDg(i, "ops", next); };
                       return (
                         <div key={k} className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-black/20 p-2">
                           <select value={op.op} onChange={(e) => setType(e.target.value)} style={{ width: 120 }} className={inputCls}>
                             <option value="add">Tambah</option>
                             <option value="connect">Kabel</option>
                             <option value="focus">Fokus</option>
+                            <option value="flow">Aliran</option>
                           </select>
                           {op.op === "add" && (<>
                             <select value={op.comp || "kotak"} onChange={(e) => setOp({ comp: e.target.value })} style={{ width: 180 }} className={inputCls}>
@@ -780,6 +889,14 @@ export default function ProjectWizard({ initial }) {
                           {op.op === "focus" && (
                             <input value={op.target || ""} onChange={(e) => setOp({ target: e.target.value })} placeholder="id komponen atau all" style={{ width: 200 }} className={inputCls} />
                           )}
+                          {op.op === "flow" && (<>
+                            <input value={op.from || ""} onChange={(e) => setOp({ from: e.target.value })} placeholder="dari id" style={{ width: 120 }} className={inputCls} />
+                            <span className="text-white/40">→</span>
+                            <input value={op.to || ""} onChange={(e) => setOp({ to: e.target.value })} placeholder="ke id" style={{ width: 120 }} className={inputCls} />
+                            <select value={op.kind || "aliran"} onChange={(e) => setOp({ kind: e.target.value })} style={{ width: 190 }} className={inputCls}>
+                              {DG_FLOWS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                            </select>
+                          </>)}
                           <button type="button" onClick={() => editDg(i, "ops", ops.filter((_, x) => x !== k))} className={btnCls}>Hapus</button>
                         </div>
                       );

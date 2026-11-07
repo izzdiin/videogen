@@ -50,8 +50,11 @@ export default function CreateForm() {
       dgWatermark: fd.get("dgWatermark"),
       dgAccent: fd.get("dgAccent"),
       dgTheme: fd.get("dgTheme"),
+      dgMode: fd.get("dgMode"),
       edWatermark: fd.get("edWatermark"),
       edAccent: fd.get("edAccent"),
+      captionStyle: fd.get("captionStyle"),
+      scriptTemplate: fd.get("scriptTemplate"),
       scriptModel,
       imageProvider,
       voProvider,
@@ -218,6 +221,26 @@ export default function CreateForm() {
           </div>
         </>
       )}
+      {engine === "slides" && (
+        <>
+          <div>
+            <label className={labelCls}>Gaya caption Slides</label>
+            <select name="captionStyle" className={inputCls} defaultValue="frasa">
+              <option value="frasa">Frasa — kotak subtitle biasa di bawah</option>
+              <option value="satukata">Satu Kata — satu kata raksasa per ketukan (ala kartun 2D), satu kata disorot lime</option>
+            </select>
+            <p className="mt-1 text-xs text-white/40">Bisa diubah lagi di halaman proyek.</p>
+          </div>
+          <div>
+            <label className={labelCls}>Template naskah Slides</label>
+            <select name="scriptTemplate" className={inputCls} defaultValue="">
+              <option value="">Standar — alur hook → konteks → poin → penutup</option>
+              <option value="andai">Andai-Andai — cerita "gimana kalau..." langkah demi langkah (ala what-if)</option>
+            </select>
+            <p className="mt-1 text-xs text-white/40">Naskah Slides selalu menyertakan saran kartu polling penutup; bisa diedit/dikosongkan di halaman proyek.</p>
+          </div>
+        </>
+      )}
       {engine === "editorial" && (
         <>
           <div>
@@ -251,6 +274,14 @@ export default function CreateForm() {
               <option value="dark">Gelap — kanvas gelap</option>
             </select>
             <p className="mt-1 text-xs text-white/40">Bisa diubah lagi di halaman proyek.</p>
+          </div>
+          <div>
+            <label className={labelCls}>Mode Diagram</label>
+            <select name="dgMode" className={inputCls} defaultValue="akumulasi">
+              <option value="akumulasi">Akumulasi — satu diagram dibangun bertahap (gaya asli)</option>
+              <option value="bedah">Bedah — halaman diagram per scene + kartu angka besar (ala bedah sains)</option>
+            </select>
+            <p className="mt-1 text-xs text-white/40">Mode Bedah: tiap scene adalah halaman sendiri (headline + kartu data angka raksasa + diagram subjek dengan panah aliran + caption kata kunci). Bisa diubah lagi di halaman proyek; naskah perlu dibuat ulang setelah ganti mode.</p>
           </div>
         </>
       )}

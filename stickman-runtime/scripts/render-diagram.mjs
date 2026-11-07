@@ -308,6 +308,56 @@ const COMP = {
     }
     ctx.fillStyle = GOLD; ctx.fillRect(x + 92, gy - 52, 12, 9);
   },
+  "panah-panas"(ctx, x, gy, t) {
+    // Rising heat: three wavy arrows, dash offset stepping on the 0.25s grid.
+    ctx.save();
+    ctx.strokeStyle = "#E4572E";
+    ctx.lineWidth = 7;
+    ctx.lineCap = "round";
+    ctx.setLineDash([30, 20]);
+    ctx.lineDashOffset = -Math.floor(t * 4) * 9;
+    for (const dx of [-58, 0, 58]) {
+      ctx.beginPath();
+      ctx.moveTo(x + dx, gy - 8);
+      ctx.quadraticCurveTo(x + dx - 16, gy - 70, x + dx, gy - 118);
+      ctx.quadraticCurveTo(x + dx + 16, gy - 152, x + dx, gy - 178);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#E4572E";
+    for (const dx of [-58, 0, 58]) {
+      ctx.beginPath();
+      ctx.moveTo(x + dx - 11, gy - 168); ctx.lineTo(x + dx + 11, gy - 168); ctx.lineTo(x + dx, gy - 190);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  },
+  aliran(ctx, x, gy, t) {
+    // Circular airflow loop: three arc arrows rotating on the 0.25s grid.
+    const cx = x, cy = gy - 108, r = 80;
+    const rot = (Math.floor(t * 4) % 12) * (Math.PI / 6);
+    ctx.save();
+    ctx.strokeStyle = "#1F8A8C";
+    ctx.fillStyle = "#1F8A8C";
+    ctx.lineWidth = 7;
+    ctx.lineCap = "round";
+    for (let k = 0; k < 3; k++) {
+      const a0 = rot + k * (Math.PI * 2 / 3) + 0.28;
+      const a1 = rot + (k + 1) * (Math.PI * 2 / 3) - 0.28;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, a0, a1);
+      ctx.stroke();
+      const ex = cx + Math.cos(a1) * r, ey = cy + Math.sin(a1) * r;
+      const tx = -Math.sin(a1), ty = Math.cos(a1);
+      const nx = Math.cos(a1), ny = Math.sin(a1);
+      ctx.beginPath();
+      ctx.moveTo(ex + tx * 20, ey + ty * 20);
+      ctx.lineTo(ex - tx * 4 - nx * 11, ey - ty * 4 - ny * 11);
+      ctx.lineTo(ex - tx * 4 + nx * 11, ey - ty * 4 + ny * 11);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  },
   lampu(ctx, x, gy, t) {
     ctx.lineWidth = 6;
     line(ctx, x, gy - 228, x, gy);
@@ -381,6 +431,33 @@ function drawWorld(ctx, sec, t, groundScreenY) {
     }
   }
 
+  // Flow arrows (mode Bedah): curved, dash-marching toward the target,
+  // with an arrowhead. Motion steps on the 0.25s cache grid.
+  for (const fl of sec.flows || []) {
+    const mx = (fl.x1 + fl.x2) / 2;
+    const ctrlY = Math.min(fl.y1, fl.y2) - 110;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(fl.x1, fl.y1);
+    ctx.quadraticCurveTo(mx, ctrlY, fl.x2, fl.y2);
+    ctx.strokeStyle = fl.color;
+    ctx.lineWidth = 6;
+    ctx.lineCap = "round";
+    ctx.setLineDash([30, 20]);
+    ctx.lineDashOffset = -Math.floor(t * 4) * 10;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // arrowhead at the end, along the curve's exit tangent (ctrl -> end)
+    const ang = Math.atan2(fl.y2 - ctrlY, fl.x2 - mx);
+    ctx.fillStyle = fl.color;
+    ctx.beginPath();
+    ctx.moveTo(fl.x2, fl.y2);
+    ctx.lineTo(fl.x2 - Math.cos(ang - 0.42) * 26, fl.y2 - Math.sin(ang - 0.42) * 26);
+    ctx.lineTo(fl.x2 - Math.cos(ang + 0.42) * 26, fl.y2 - Math.sin(ang + 0.42) * 26);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
   // Components
   for (const comp of sec.components || []) {
     ctx.save();
@@ -402,7 +479,28 @@ function drawWorld(ctx, sec, t, groundScreenY) {
     ctx.lineJoin = "round";
     (COMP[comp.comp] || COMP.kotak)(ctx, comp.x, sec.groundY, t);
     ctx.restore();
-    if (comp.label) {
+    if (comp.label && M.mode === "bedah") {
+      // Callout pill (mode Bedah): dark pill above the component + leader.
+      ctx.save();
+      ctx.font = `21px InterB`;
+      const tw = ctx.measureText(comp.label).width;
+      const pw = tw + 30, ph = 40;
+      const px = comp.x - pw / 2, py = sec.groundY - comp.h - 64;
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(comp.x, py + ph);
+      ctx.lineTo(comp.x, sec.groundY - comp.h - 4);
+      ctx.stroke();
+      rr(ctx, px, py, pw, ph, 20);
+      ctx.fillStyle = "#101216";
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(comp.label, comp.x, py + ph / 2 + 1);
+      ctx.restore();
+    } else if (comp.label) {
       ctx.save();
       ctx.font = `23px InterM`;
       ctx.fillStyle = LABEL;
@@ -584,6 +682,76 @@ function drawCard(ctx, sec, t) {
   ctx.restore();
 }
 
+// Bedah data cards (Fase B): white cards under the headline — small caps
+// label, a very large number (red when tone "hot"), and the consequence
+// line on a yellow highlight. Pop in shortly after the section starts.
+function drawDataCards(ctx, sec, t) {
+  const cards = sec.dataCards || [];
+  if (!cards.length) return;
+  const pop = clamp01((t - sec.start - 0.25) / 0.4);
+  if (pop <= 0) return;
+  const gap = 18;
+  const totalW = DW - 92;
+  const cardW = cards.length === 1 ? Math.min(totalW, 560) : (totalW - gap) / 2;
+  const cardH = 158;
+  const y = 258;
+  cards.forEach((card, i) => {
+    const x = 46 + i * (cardW + gap);
+    ctx.save();
+    ctx.globalAlpha = pop;
+    ctx.translate(x, y);
+    ctx.scale(0.94 + 0.06 * pop, 0.94 + 0.06 * pop);
+    ctx.translate(-x, -y);
+    rr(ctx, x, y, cardW, cardH, 16);
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fill();
+    ctx.strokeStyle = DARK ? "rgba(255,255,255,0.25)" : "rgba(35,39,46,0.14)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+    if (card.label) {
+      ctx.font = `19px InterB`;
+      ctx.fillStyle = LABEL;
+      ctx.fillText(String(card.label).toUpperCase(), x + 20, y + 28);
+    }
+    let size = 60;
+    ctx.font = `${size}px InterX`;
+    while (ctx.measureText(String(card.value)).width > cardW - 40 && size > 30) {
+      size -= 4; ctx.font = `${size}px InterX`;
+    }
+    ctx.fillStyle = card.tone === "hot" ? "#D64541" : INK;
+    ctx.fillText(String(card.value), x + 20, y + 82);
+    if (card.result) {
+      ctx.font = `23px InterB`;
+      const tw = ctx.measureText(String(card.result)).width;
+      rr(ctx, x + 14, y + 112, Math.min(cardW - 28, tw + 18), 34, 7);
+      ctx.fillStyle = YELLOW;
+      ctx.fill();
+      ctx.fillStyle = "#101216";
+      ctx.fillText(String(card.result), x + 23, y + 130);
+    }
+    ctx.restore();
+  });
+}
+
+// Bedah watermark: a persistent dark pill at the top-right, like the
+// reference series logo. Returns nothing; drawn above the headline zone.
+function drawBedahWatermark(ctx) {
+  if (!M.watermark) return;
+  ctx.font = `22px InterB`;
+  const tw = ctx.measureText(String(M.watermark)).width;
+  const pw = tw + 36, ph = 44;
+  const x = DW - 46 - pw, y = 38;
+  rr(ctx, x, y, pw, ph, 22);
+  ctx.fillStyle = "#101216";
+  ctx.fill();
+  ctx.fillStyle = "#FFFFFF";
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillText(String(M.watermark), x + 18, y + ph / 2 + 1);
+}
+
 function drawCaption(ctx, cue) {
   let size = 35;
   ctx.font = `${size}px InterB`;
@@ -637,19 +805,39 @@ function drawFrame(t) {
   const sec = SECTIONS.find((s) => t >= s.start && t < s.end) || SECTIONS[SECTIONS.length - 1];
   if (!sec) return canvas;
 
-  const groundScreenY = DH * (planeKind === "l" ? 0.74 : 0.735);
+  const bedah = M.mode === "bedah";
+  const groundScreenY = bedah ? DH * (planeKind === "l" ? 0.86 : 0.80) : DH * (planeKind === "l" ? 0.74 : 0.735);
   drawWorld(ctx, sec, t, groundScreenY);
   if (!sec.closing) {
-    drawHeadline(ctx, sec);
-    drawTracker(ctx, sec, t);
-    drawCard(ctx, sec, t);
+    if (bedah) {
+      drawBedahWatermark(ctx);
+      // Badge (rare in Bedah) goes under the headline instead of top-right,
+      // where the watermark pill lives.
+      drawHeadline(ctx, { ...sec, badge: "" });
+      if (sec.badge) {
+        ctx.font = `24px InterB`;
+        const bw = ctx.measureText(String(sec.badge).toUpperCase()).width + 40;
+        rr(ctx, 46, 216, bw, 46, 23);
+        ctx.fillStyle = sec.badgeColor || "#6B7280";
+        ctx.fill();
+        ctx.fillStyle = "#FFFFFF";
+        ctx.textBaseline = "middle";
+        ctx.textAlign = "left";
+        ctx.fillText(String(sec.badge).toUpperCase(), 66, 240);
+      }
+      drawDataCards(ctx, sec, t);
+    } else {
+      drawHeadline(ctx, sec);
+      drawTracker(ctx, sec, t);
+      drawCard(ctx, sec, t);
+    }
   }
 
   const cue = (sec.captions || []).find((c) => t >= c.start && t < c.end);
   let barBottom = 0;
   if (cue) barBottom = drawCaption(ctx, cue);
 
-  if (M.watermark) {
+  if (M.watermark && !bedah) {
     ctx.font = `24px InterM`;
     ctx.fillStyle = "#A39E93";
     ctx.textAlign = "center";

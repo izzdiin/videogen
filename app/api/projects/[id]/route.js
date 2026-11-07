@@ -27,10 +27,11 @@ export async function PATCH(req, { params }) {
     project.darkcard = cur;
   }
   if (body.diagram && typeof body.diagram === "object") {
-    const cur = project.diagram || { watermark: "", accent: "#E4572E", theme: "light" };
+    const cur = project.diagram || { watermark: "", accent: "#E4572E", theme: "light", mode: "akumulasi" };
     if (typeof body.diagram.watermark === "string") cur.watermark = body.diagram.watermark.slice(0, 80);
     if (/^#[0-9a-fA-F]{6}$/.test(body.diagram.accent || "")) cur.accent = body.diagram.accent;
     if (["light", "dark"].includes(body.diagram.theme)) cur.theme = body.diagram.theme;
+    if (["akumulasi", "bedah"].includes(body.diagram.mode)) cur.mode = body.diagram.mode;
     project.diagram = cur;
   }
   if (body.editorial && typeof body.editorial === "object") {
@@ -38,6 +39,19 @@ export async function PATCH(req, { params }) {
     if (typeof body.editorial.watermark === "string") cur.watermark = body.editorial.watermark.slice(0, 80);
     if (/^#[0-9a-fA-F]{6}$/.test(body.editorial.accent || "")) cur.accent = body.editorial.accent;
     project.editorial = cur;
+  }
+  if (body.captionStyle !== undefined) {
+    project.captionStyle = body.captionStyle === "satukata" ? "satukata" : "frasa";
+  }
+  if (body.scriptTemplate !== undefined) {
+    project.scriptTemplate = body.scriptTemplate === "andai" ? "andai" : "";
+  }
+  if (body.poll && typeof body.poll === "object") {
+    project.poll = {
+      question: String(body.poll.question || "").slice(0, 90),
+      options: (Array.isArray(body.poll.options) ? body.poll.options : [])
+        .map((o) => String(o || "").slice(0, 24)).slice(0, 3),
+    };
   }
   if (["B1", "B2", "B3"].includes(body.stickStyle)) project.stickStyle = body.stickStyle;
   if (VISUAL_STYLE_IDS.includes(body.visualStyle)) project.visualStyle = body.visualStyle;
