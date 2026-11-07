@@ -4,6 +4,7 @@ import { renderProject } from "../../../../../lib/render.js";
 import { renderStickman, ensureStickmanProps } from "../../../../../lib/stickman.js";
 import { renderDarkcard } from "../../../../../lib/darkcard.js";
 import { renderDiagram } from "../../../../../lib/diagram.js";
+import { renderEditorial } from "../../../../../lib/editorial.js";
 import { activeJobs, startJobHeartbeat } from "../../../../../lib/jobs.js";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export async function POST(req, { params }) {
   if (project.scenes.length === 0) {
     return NextResponse.json({ error: "Belum ada scene." }, { status: 400 });
   }
-  if (project.engine === "stickman" || project.engine === "darkcard" || project.engine === "diagram") {
+  if (project.engine === "stickman" || project.engine === "darkcard" || project.engine === "diagram" || project.engine === "editorial") {
     const noVo = project.scenes.findIndex((s) => s.vo?.status !== "ready");
     if (noVo >= 0) {
       return NextResponse.json(
@@ -24,7 +25,8 @@ export async function POST(req, { params }) {
         { status: 400 }
       );
     }
-  } else {
+  }
+  if (project.engine !== "stickman" && project.engine !== "darkcard" && project.engine !== "diagram") {
     const missing = project.scenes.findIndex((s) => s.image?.status !== "ready");
     if (missing >= 0) {
       return NextResponse.json(
@@ -55,7 +57,7 @@ export async function POST(req, { params }) {
           }
         });
       }
-      const renderFn = fresh.engine === "stickman" ? renderStickman : fresh.engine === "darkcard" ? renderDarkcard : fresh.engine === "diagram" ? renderDiagram : renderProject;
+      const renderFn = fresh.engine === "stickman" ? renderStickman : fresh.engine === "darkcard" ? renderDarkcard : fresh.engine === "diagram" ? renderDiagram : fresh.engine === "editorial" ? renderEditorial : renderProject;
       const result = await renderFn(fresh, kind, (m) => {
         const p = loadProject(project.id);
         if (p) {

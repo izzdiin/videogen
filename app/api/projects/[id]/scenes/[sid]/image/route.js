@@ -5,6 +5,7 @@ import { loadProject, saveProject, projectDir } from "../../../../../../../lib/s
 import { generateImage, generateImageWorkersAI, generateImageVia9Router, generateImageViaBridge } from "../../../../../../../lib/ai.js";
 import { b2ArtPrompt, b3ArtPrompt } from "../../../../../../../lib/stickman.js";
 import { slidesImagePrompt } from "../../../../../../../lib/visualStyles.js";
+import { editorialImagePrompt } from "../../../../../../../lib/editorial.js";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +41,22 @@ export async function POST(req, { params }) {
         throw new Error("Penyedia gambar proyek ini 'unggah manual' — unggah berkas gambar untuk scene ini.");
       }
       const rel = `stills/${scene.id}.jpg`;
-      if (project.engine === "stickman" && ["B2", "B3"].includes(project.stickStyle || "B1")) {
+      if (project.engine === "editorial") {
+        if (provider === "pollinations") {
+          const seed = Math.floor(Math.random() * 1_000_000);
+          await generateImage(editorialImagePrompt(project, scene), path.join(projectDir(project.id), rel), seed, undefined, project.aspect);
+          scene.image = { status: "ready", file: rel, seed, source: "pollinations", updatedAt: new Date().toISOString() };
+        } else if (provider === "muse-bridge") {
+          await generateImageViaBridge(editorialImagePrompt(project, scene), path.join(projectDir(project.id), rel), project.aspect);
+          scene.image = { status: "ready", file: rel, source: "muse-bridge", updatedAt: new Date().toISOString() };
+        } else if (provider === "workers-ai") {
+          await generateImageWorkersAI(editorialImagePrompt(project, scene), path.join(projectDir(project.id), rel));
+          scene.image = { status: "ready", file: rel, source: "workers-ai", updatedAt: new Date().toISOString() };
+        } else {
+          await generateImageVia9Router(editorialImagePrompt(project, scene), path.join(projectDir(project.id), rel), project.aspect);
+          scene.image = { status: "ready", file: rel, source: "sdxl-9router", updatedAt: new Date().toISOString() };
+        }
+      } else if (project.engine === "stickman" && ["B2", "B3"].includes(project.stickStyle || "B1")) {
         const artPrompt = project.stickStyle === "B3" ? b3ArtPrompt : b2ArtPrompt;
         if (provider === "pollinations") {
           const seed = Math.floor(Math.random() * 1_000_000);

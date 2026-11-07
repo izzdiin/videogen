@@ -50,6 +50,8 @@ export default function CreateForm() {
       dgWatermark: fd.get("dgWatermark"),
       dgAccent: fd.get("dgAccent"),
       dgTheme: fd.get("dgTheme"),
+      edWatermark: fd.get("edWatermark"),
+      edAccent: fd.get("edAccent"),
       scriptModel,
       imageProvider,
       voProvider,
@@ -162,6 +164,7 @@ export default function CreateForm() {
           <option value="stickman">Stickman — gambar tangan (kaomei/stickman-video-director)</option>
           <option value="darkcard">Dark Card — kartu UI gelap (listicle teknologi)</option>
           <option value="diagram">Diagram — diagram vektor penjelas (ala reel edukasi teknis)</option>
+          <option value="editorial">Editorial — motion graphics editorial (satu objek hero + tipografi raksasa)</option>
         </select>
         <p className="mt-1 text-xs text-white/40">
           {engine === "stickman"
@@ -174,6 +177,8 @@ export default function CreateForm() {
               ? "Latar navy gelap, chip label + judul mono, tumpukan kartu berikon yang bertambah tiap scene, caption besar dengan satu frasa disorot. Tanpa gambar AI; pilihan gambar latar & perakitan tidak berlaku."
               : engine === "diagram"
               ? "Satu diagram vektor di atas kanvas krem yang dibangun bertahap (komponen muncul, kabel tersambung, kamera menyapu), headline per seksi dengan satu kata berwarna aksen, pil status, dan subtitle karaoke. Tanpa gambar AI; pilihan gambar latar & perakitan tidak berlaku."
+              : engine === "editorial"
+              ? "Kertas krem, satu gambar objek hero per scene (AI) dengan dorongan zoom pelan, headline huruf condensed raksasa + satu kata serif italic berwarna aksen + pil label kecil, potongan cepat, TANPA subtitle (tipografi adalah pengaitnya), penutup memudar ke putih. Pilihan perakitan tidak berlaku."
               : "Setiap scene adalah gambar AI diam yang digerakkan (zoom) dengan overlay dan subtitle."}
         </p>
       </div>
@@ -210,6 +215,20 @@ export default function CreateForm() {
             <label className={labelCls}>Warna aksen Dark Card</label>
             <input name="dcAccent" type="color" defaultValue="#F26D8D" className="h-10 w-24 cursor-pointer rounded-lg border border-white/15 bg-white/5 px-1 py-1" />
             <p className="mt-1 text-xs text-white/40">Untuk chip label, garis kartu terbaru, dan sorotan caption. Bisa diubah lagi di halaman proyek.</p>
+          </div>
+        </>
+      )}
+      {engine === "editorial" && (
+        <>
+          <div>
+            <label className={labelCls}>Watermark Editorial (bebas, boleh kosong)</label>
+            <input name="edWatermark" placeholder="mis. @handleku" className={inputCls} />
+            <p className="mt-1 text-xs text-white/40">Teks kecil di dasar video, identitas kanalmu sendiri. Bisa diubah lagi di halaman proyek.</p>
+          </div>
+          <div>
+            <label className={labelCls}>Warna aksen Editorial</label>
+            <input name="edAccent" type="color" defaultValue="#E94F1E" className="h-10 w-24 cursor-pointer rounded-lg border border-white/15 bg-white/5 px-1 py-1" />
+            <p className="mt-1 text-xs text-white/40">Untuk pil label dan kata serif italic tiap scene. Bisa diubah lagi di halaman proyek.</p>
           </div>
         </>
       )}

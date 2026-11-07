@@ -22,7 +22,7 @@ const DG_BADGES = [["green", "Hijau (aman / berhasil)"], ["orange", "Oranye (akt
 const DG_COMPS = [["hp", "HP / ponsel"], ["bts", "Menara BTS"], ["server", "Server"], ["monitor", "Monitor / layar"], ["router", "Router"], ["cloud", "Cloud"], ["database", "Database"], ["orang", "Orang / pengguna"], ["rumah", "Rumah"], ["gembok", "Gembok / enkripsi"], ["chat", "Chat / pesan"], ["dokumen", "Dokumen"], ["kotak", "Kotak berlabel (umum)"], ["panel-surya", "Panel surya"], ["baterai", "Baterai"], ["bank", "Bank / gedung bank"], ["globe", "Globe / internet"], ["satelit", "Satelit"], ["mobil", "Mobil"], ["lampu", "Lampu / tiang lampu"]];
 const DG_CABLES = [["blue", "Biru (alur normal)"], ["gold", "Emas (data disalin)"], ["red", "Merah (bahaya)"], ["green", "Hijau (aman)"], ["grey", "Abu (netral)"]];
 const DG_STEPS = [["todo", "… belum"], ["ask", "? diproses / ditanya"], ["ok", "✓ selesai / disetujui"], ["bad", "✗ gagal / ditolak"]];
-const ENGINE_LABEL = { darkcard: "Dark Card", slides: "Slides", diagram: "Diagram" };
+const ENGINE_LABEL = { darkcard: "Dark Card", slides: "Slides", diagram: "Diagram", editorial: "Editorial" };
 
 function VoRecorder({ onDone, disabled }) {
   const [phase, setPhase] = useState("idle"); // idle | recording | ready
@@ -135,6 +135,7 @@ export default function ProjectWizard({ initial }) {
   const [exec, setExec] = useState(initial.executors);
   const [dcCfg, setDcCfg] = useState(initial.darkcard || { watermark: "", accent: "#F26D8D" });
   const [dgCfg, setDgCfg] = useState(initial.diagram || { watermark: "", accent: "#E4572E" });
+  const [edCfg, setEdCfg] = useState(initial.editorial || { watermark: "", accent: "#E94F1E" });
   const [stickStyle, setStickStyle] = useState(initial.stickStyle || "B1");
   const [visualStyle, setVisualStyle] = useState(initial.visualStyle || "bebas");
   const [dirty, setDirty] = useState(false);
@@ -232,6 +233,13 @@ export default function ProjectWizard({ initial }) {
       setDgCfg(data.project.diagram || dgCfg);
     });
 
+  const saveEd = () =>
+    call("saveEd", async () => {
+      const data = await jsonFetch(`/api/projects/${id}`, "PATCH", { editorial: edCfg });
+      setProject(data.project);
+      setEdCfg(data.project.editorial || edCfg);
+    });
+
   const saveStick = () =>
     call("saveStick", async () => {
       const data = await jsonFetch(`/api/projects/${id}`, "PATCH", { stickStyle });
@@ -276,6 +284,12 @@ export default function ProjectWizard({ initial }) {
   function editDg(idx, field, value) {
     setScenes((prev) =>
       prev.map((s, i) => (i === idx ? { ...s, dg: { ...(s.dg || {}), [field]: value } } : s))
+    );
+    setDirty(true);
+  }
+  function editEd(idx, field, value) {
+    setScenes((prev) =>
+      prev.map((s, i) => (i === idx ? { ...s, ed: { ...(s.ed || {}), [field]: value } } : s))
     );
     setDirty(true);
   }
@@ -533,6 +547,23 @@ export default function ProjectWizard({ initial }) {
             </div>
           </div>
         )}
+        {project.engine === "editorial" && (
+          <div className="mt-4 grid gap-3 border-t border-white/10 pt-3 md:grid-cols-2">
+            <div>
+              <label className={labelCls}>Watermark Editorial (bebas, boleh kosong)</label>
+              <input value={edCfg.watermark || ""} onChange={(e) => setEdCfg({ ...edCfg, watermark: e.target.value })} placeholder="mis. @handleku" className={inputCls} />
+              <p className="mt-1 text-xs text-white/40">Teks kecil di dasar video — identitas kanalmu sendiri.</p>
+            </div>
+            <div>
+              <label className={labelCls}>Warna aksen Editorial</label>
+              <div className="flex items-center gap-2">
+                <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(edCfg.accent || "") ? edCfg.accent : "#E94F1E"} onChange={(e) => setEdCfg({ ...edCfg, accent: e.target.value })} className="h-10 w-24 cursor-pointer rounded-lg border border-white/15 bg-white/5 px-1 py-1" />
+                <button onClick={saveEd} disabled={busy === "saveEd"} className={btnCls}>Simpan watermark & aksen</button>
+              </div>
+              <p className="mt-1 text-xs text-white/40">Pil label dan kata serif italic tiap scene memakai warna ini.</p>
+            </div>
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap gap-2">
           <button onClick={saveExecutors} disabled={busy === "saveExec"} className={btnCls}>Simpan pengaturan</button>
           <button onClick={runAuto} disabled={busy === "auto" || jobBusy} className={btnAmber}>
@@ -570,7 +601,7 @@ export default function ProjectWizard({ initial }) {
                   <input value={s.title} onChange={(e) => editScene(i, "title", e.target.value)} className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>{project.engine === "stickman" ? "Teks layar baris 1 (judul besar tulisan tangan)" : project.engine === "darkcard" ? "Judul layar (mono, maks 3 kata)" : project.engine === "diagram" ? "Headline seksi (judul besar di atas diagram)" : "Teks overlay (judul besar di video)"}</label>
+                  <label className={labelCls}>{project.engine === "stickman" ? "Teks layar baris 1 (judul besar tulisan tangan)" : project.engine === "darkcard" ? "Judul layar (mono, maks 3 kata)" : project.engine === "diagram" ? "Headline seksi (judul besar di atas diagram)" : project.engine === "editorial" ? "Headline editorial (condensed, 1–3 kata, HURUF BESAR)" : "Teks overlay (judul besar di video)"}</label>
                   <input value={s.overlay} onChange={(e) => editScene(i, "overlay", e.target.value)} className={inputCls} />
                 </div>
               </div>
@@ -756,6 +787,22 @@ export default function ProjectWizard({ initial }) {
                     <p className="mt-1 text-xs text-white/40">Komponen muncul sekali lalu menetap; id harus sama persis dengan yang dirujuk kabel/fokus. Tanpa perintah fokus, kamera mengikuti komponen terbaru.</p>
                   </div>
                 </div>
+              ) : project.engine === "editorial" ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div>
+                    <label className={labelCls}>Kata aksen (serif italic, satu kata kontras)</label>
+                    <input value={s.ed?.accentWord || ""} onChange={(e) => editEd(i, "accentWord", e.target.value)} placeholder="mis. hilang" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Pil label (tag kategori kecil, opsional)</label>
+                    <input value={s.ed?.label || ""} onChange={(e) => editEd(i, "label", e.target.value)} placeholder="mis. SEJARAH" className={inputCls} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className={labelCls}>Arahan gambar objek hero (Inggris, satu objek tunggal)</label>
+                    <textarea rows={2} value={s.imagePrompt} onChange={(e) => editScene(i, "imagePrompt", e.target.value)} placeholder="mis. a vintage brass magnifying glass, straight-on view, dramatic soft light" className={inputCls} />
+                    <p className="mt-1 text-xs text-white/40">Gaya kolase editorial (latar kertas krem polos, objek tunggal di tengah, tanpa teks) ditambahkan otomatis saat gambar dibuat di tahap 2.</p>
+                  </div>
+                </div>
               ) : (
                 <div className="mt-3">
                   <label className={labelCls}>Prompt gambar latar (Inggris)</label>
@@ -769,7 +816,7 @@ export default function ProjectWizard({ initial }) {
       </Section>
 
       {/* Tahap 2 */}
-      <Section no={2} title={project.engine === "stickman" ? (["B2", "B3"].includes(project.stickStyle || "B1") ? "Ilustrasi scene" : "Properti & pose") : project.engine === "darkcard" ? "Tumpukan kartu" : project.engine === "diagram" ? "Diagram" : "Gambar latar"} desc={project.engine === "stickman" ? ((project.stickStyle || "B1") === "B3" ? "Setiap scene B3 adalah ilustrasi siluet putih/abu satu frame penuh (SDXL) di bidang nyaris hitam dari arahan gambar di tahap 1, atau unggah ilustrasimu sendiri. Tanpa ilustrasi, scene tampil sebagai judul di atas bidang gelap." : (project.stickStyle || "B1") === "B2" ? "Setiap scene B2 adalah ilustrasi warna satu frame penuh (SDXL, gaya hand-drawn di kertas krem) dari arahan gambar di tahap 1, atau unggah ilustrasimu sendiri. Tanpa ilustrasi, scene tampil sebagai judul di atas kertas krem." : "Mode stickman digambar dari pose karakter dan properti crayon bawaan B1 yang dipilih di tahap 1. Properti khusus dibuat otomatis (SDXL gaya crayon) saat mode otomatis berjalan atau sebelum render.") : project.engine === "darkcard" ? "Dark Card tidak memakai gambar: setiap scene menambah satu kartu ke tumpukan yang tampil terus. Urutan tumpukan mengikuti urutan scene; kartu diatur di tahap 1." : project.engine === "diagram" ? "Diagram tidak memakai gambar: satu diagram vektor dibangun bertahap — komponen muncul dan tersambung kabel mengikuti perintah tiap scene dari tahap 1, kamera menyapu ke bagian yang baru. Ringkasan keadaan diagram per scene:" : "Generate per scene dari prompt di tahap 1, atau unggah gambar sendiri (potret 9:16 disarankan)."}>
+      <Section no={2} title={project.engine === "stickman" ? (["B2", "B3"].includes(project.stickStyle || "B1") ? "Ilustrasi scene" : "Properti & pose") : project.engine === "darkcard" ? "Tumpukan kartu" : project.engine === "diagram" ? "Diagram" : project.engine === "editorial" ? "Gambar hero" : "Gambar latar"} desc={project.engine === "stickman" ? ((project.stickStyle || "B1") === "B3" ? "Setiap scene B3 adalah ilustrasi siluet putih/abu satu frame penuh (SDXL) di bidang nyaris hitam dari arahan gambar di tahap 1, atau unggah ilustrasimu sendiri. Tanpa ilustrasi, scene tampil sebagai judul di atas bidang gelap." : (project.stickStyle || "B1") === "B2" ? "Setiap scene B2 adalah ilustrasi warna satu frame penuh (SDXL, gaya hand-drawn di kertas krem) dari arahan gambar di tahap 1, atau unggah ilustrasimu sendiri. Tanpa ilustrasi, scene tampil sebagai judul di atas kertas krem." : "Mode stickman digambar dari pose karakter dan properti crayon bawaan B1 yang dipilih di tahap 1. Properti khusus dibuat otomatis (SDXL gaya crayon) saat mode otomatis berjalan atau sebelum render.") : project.engine === "darkcard" ? "Dark Card tidak memakai gambar: setiap scene menambah satu kartu ke tumpukan yang tampil terus. Urutan tumpukan mengikuti urutan scene; kartu diatur di tahap 1." : project.engine === "diagram" ? "Diagram tidak memakai gambar: satu diagram vektor dibangun bertahap — komponen muncul dan tersambung kabel mengikuti perintah tiap scene dari tahap 1, kamera menyapu ke bagian yang baru. Ringkasan keadaan diagram per scene:" : project.engine === "editorial" ? "Setiap scene Editorial adalah SATU gambar objek hero dari arahan gambar di tahap 1 (gaya kolase editorial ditambahkan otomatis), atau unggah gambarmu sendiri — paling bagus objek tunggal di latar polos krem. Tanpa gambar, scene tidak bisa dirender." : "Generate per scene dari prompt di tahap 1, atau unggah gambar sendiri (potret 9:16 disarankan)."}>
         {dirty && <p className="mb-2 text-xs text-amber-300">Ada perubahan naskah belum disimpan — generate memakai prompt yang tersimpan di server.</p>}
         {project.engine === "stickman" && (project.stickStyle || "B1") === "B1" ? (
           <div className="space-y-2">
@@ -923,7 +970,7 @@ export default function ProjectWizard({ initial }) {
       </Section>
 
       {/* Tahap 4 */}
-      <Section no={4} title="Perakitan" desc={project.engine === "stickman" ? `Render draf = pratinjau 20 detik pertama dari renderer stickman; render final = film penuh mengikuti rasio aspek proyek, dengan caption dan efek suara. Gaya aktif: ${project.stickStyle || "B1"}.` : project.engine === "darkcard" ? "Render draf = pratinjau 20 detik pertama; render final = film penuh mengikuti rasio aspek proyek, dengan tumpukan kartu, caption sorot, dan watermark." : project.engine === "diagram" ? "Render draf = pratinjau 20 detik pertama; render final = film penuh mengikuti rasio aspek proyek, dengan diagram yang dibangun bertahap, kamera menyapu, headline & pil status, subtitle karaoke, dan watermark." : "Render draf (cepat, 540x960) untuk pratinjau, koreksi bila perlu, lalu render final 1080x1920."}>
+      <Section no={4} title="Perakitan" desc={project.engine === "stickman" ? `Render draf = pratinjau 20 detik pertama dari renderer stickman; render final = film penuh mengikuti rasio aspek proyek, dengan caption dan efek suara. Gaya aktif: ${project.stickStyle || "B1"}.` : project.engine === "darkcard" ? "Render draf = pratinjau 20 detik pertama; render final = film penuh mengikuti rasio aspek proyek, dengan tumpukan kartu, caption sorot, dan watermark." : project.engine === "diagram" ? "Render draf = pratinjau 20 detik pertama; render final = film penuh mengikuti rasio aspek proyek, dengan diagram yang dibangun bertahap, kamera menyapu, headline & pil status, subtitle karaoke, dan watermark." : project.engine === "editorial" ? "Render draf = pratinjau 20 detik pertama; render final = film penuh mengikuti rasio aspek proyek, dengan tipografi editorial, dorongan zoom pada gambar hero, dan penutup memudar ke putih. Editorial tidak memakai subtitle." : "Render draf (cepat, 540x960) untuk pratinjau, koreksi bila perlu, lalu render final 1080x1920."}>
         {exec.assembly === "export" && project.engine === "slides" ? (
           <div className="text-sm text-white/70">
             Mode rakit manual dipilih. Unduh paket proyek di tahap 5 — berisi still, VO, naskah,

@@ -33,6 +33,12 @@ export async function PATCH(req, { params }) {
     if (["light", "dark"].includes(body.diagram.theme)) cur.theme = body.diagram.theme;
     project.diagram = cur;
   }
+  if (body.editorial && typeof body.editorial === "object") {
+    const cur = project.editorial || { watermark: "", accent: "#E94F1E" };
+    if (typeof body.editorial.watermark === "string") cur.watermark = body.editorial.watermark.slice(0, 80);
+    if (/^#[0-9a-fA-F]{6}$/.test(body.editorial.accent || "")) cur.accent = body.editorial.accent;
+    project.editorial = cur;
+  }
   if (["B1", "B2", "B3"].includes(body.stickStyle)) project.stickStyle = body.stickStyle;
   if (VISUAL_STYLE_IDS.includes(body.visualStyle)) project.visualStyle = body.visualStyle;
   if (Array.isArray(body.scenes)) mergeScenes(project, body.scenes);
