@@ -17,7 +17,10 @@ export default function RootLayout({ children }) {
                 Studio Motion Graphics
               </span>
             </a>
-            <a href="/" className="text-sm text-white/60 hover:text-white">Proyek saya</a>
+            <div className="flex items-center gap-4">
+              <a href="/settings" className="text-sm text-white/60 hover:text-white">Pengaturan</a>
+              <a href="/" className="text-sm text-white/60 hover:text-white">Proyek saya</a>
+            </div>
           </div>
         </header>
         <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
