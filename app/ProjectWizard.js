@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { VOICES, GEMINI_VOICES, MUSE_VOICES, isGeminiVoice, isClaudeVoice, defaultGeminiVoice, defaultClaudeVoice, defaultVoice } from "../lib/voices.js";
+import { VOICES, GEMINI_VOICES, MUSE_VOICES, ELEVENLABS_VOICES, isGeminiVoice, isClaudeVoice, isElevenLabsVoice, defaultGeminiVoice, defaultClaudeVoice, defaultElevenLabsVoice, defaultVoice } from "../lib/voices.js";
 import { DC_ICONS } from "../lib/dc-icons.js";
 import { VISUAL_STYLES } from "../lib/visualStyles.js";
 import ModelPicker from "./ModelPicker.js";
@@ -403,19 +403,36 @@ export default function ProjectWizard({ initial }) {
             <label className={labelCls}>Mesin VO</label>
             <select value={exec.voProvider || "edge-tts"} onChange={(e) => {
               const p = e.target.value;
-              setExec({ ...exec, voProvider: p, voice: p === "gemini-tts" ? defaultGeminiVoice() : p === "muse-bridge" ? defaultClaudeVoice() : ((isGeminiVoice(exec.voice) || isClaudeVoice(exec.voice)) ? defaultVoice(project.audience) : exec.voice) });
+              setExec({ ...exec, voProvider: p, voice: p === "gemini-tts" ? defaultGeminiVoice() : p === "muse-bridge" ? defaultClaudeVoice() : p === "elevenlabs" ? defaultElevenLabsVoice() : ((isGeminiVoice(exec.voice) || isClaudeVoice(exec.voice) || isElevenLabsVoice(exec.voice)) ? defaultVoice(project.audience) : exec.voice) });
             }} className={inputCls}>
               <option value="edge-tts">edge-tts</option>
               <option value="gemini-tts">Gemini TTS (ekspresif)</option>
               <option value="muse-bridge">Muse (bridge) — dibacakan Muse, tanpa kuota</option>
+              <option value="elevenlabs">ElevenLabs</option>
               <option value="upload">Unggah manual</option>
             </select>
           </div>
           <div>
             <label className={labelCls}>Suara VO</label>
             <select value={exec.voice} onChange={(e) => setExec({ ...exec, voice: e.target.value })} className={inputCls}>
-              {((exec.voProvider || "edge-tts") === "gemini-tts" ? GEMINI_VOICES : (exec.voProvider || "edge-tts") === "muse-bridge" ? MUSE_VOICES : VOICES[project.audience]).map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+              {(() => {
+                const prov = exec.voProvider || "edge-tts";
+                const list = prov === "gemini-tts" ? GEMINI_VOICES : prov === "muse-bridge" ? MUSE_VOICES : prov === "elevenlabs" ? ELEVENLABS_VOICES : VOICES[project.audience];
+                const opts = list.map((v) => <option key={v.id} value={v.id}>{v.label}</option>);
+                if (prov === "elevenlabs" && exec.voice && !ELEVENLABS_VOICES.some((v) => v.id === exec.voice)) {
+                  opts.unshift(<option key="custom" value={exec.voice}>Suara kustom ({exec.voice})</option>);
+                }
+                return opts;
+              })()}
             </select>
+            {(exec.voProvider || "edge-tts") === "elevenlabs" && (
+              <input
+                value={ELEVENLABS_VOICES.some((v) => v.id === exec.voice) ? "" : (exec.voice || "")}
+                onChange={(e) => { const v = e.target.value.trim(); setExec({ ...exec, voice: v || defaultElevenLabsVoice() }); }}
+                placeholder="ID suara kustom (mis. hasil kloning) — kosongkan untuk suara bawaan"
+                className={inputCls + " mt-2"}
+              />
+            )}
             <VoicePreview voice={exec.voice} provider={exec.voProvider || "edge-tts"} />
           </div>
           <div>

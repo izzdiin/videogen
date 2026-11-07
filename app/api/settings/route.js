@@ -18,7 +18,7 @@ export async function POST(req) {
   }
   // Key fields: empty means "keep the current one" — the browser never
   // receives the real key, so it cannot resubmit it.
-  for (const k of ["ninerouterKey", "bridgeKey", "cfToken"]) {
+  for (const k of ["ninerouterKey", "bridgeKey", "cfToken", "elevenlabsKey"]) {
     if (typeof body[k] === "string" && body[k].trim()) patch[k] = body[k].trim();
   }
   saveSettings(patch);

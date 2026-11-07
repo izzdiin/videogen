@@ -1,8 +1,8 @@
 import fs from "fs";
 import path from "path";
 import { DATA_DIR } from "../../../lib/store.js";
-import { VOICES, GEMINI_VOICES, MUSE_VOICES } from "../../../lib/voices.js";
-import { synthesize, synthesizeGemini, synthesizeClaude } from "../../../lib/tts.js";
+import { VOICES, GEMINI_VOICES, MUSE_VOICES, isElevenLabsVoice } from "../../../lib/voices.js";
+import { synthesize, synthesizeGemini, synthesizeClaude, synthesizeElevenLabs } from "../../../lib/tts.js";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +26,23 @@ export async function GET(req) {
     if (!fs.existsSync(file)) {
       try {
         await synthesizeClaude(SAMPLES.id, voice, file, "id");
+      } catch (e) {
+        return new Response(`Gagal membuat contoh suara: ${e.message || e}`, { status: 502 });
+      }
+    }
+    return new Response(fs.readFileSync(file), {
+      headers: { "Content-Type": "audio/mpeg", "Cache-Control": "public, max-age=86400" },
+    });
+  }
+
+  if (provider === "elevenlabs") {
+    if (!isElevenLabsVoice(voice)) {
+      return new Response("Suara tidak dikenal.", { status: 400 });
+    }
+    const file = path.join(dir, `elevenlabs-${voice}.mp3`);
+    if (!fs.existsSync(file)) {
+      try {
+        await synthesizeElevenLabs(SAMPLES.id, voice, file);
       } catch (e) {
         return new Response(`Gagal membuat contoh suara: ${e.message || e}`, { status: 502 });
       }

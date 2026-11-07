@@ -43,6 +43,7 @@ export default function SettingsForm() {
     bridgeKey: "",
     cfAccountId: "",
     cfToken: "",
+    elevenlabsKey: "",
   });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -79,7 +80,7 @@ export default function SettingsForm() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal menyimpan.");
       applyView(data.settings);
-      setForm((f) => ({ ...f, ninerouterKey: "", bridgeKey: "", cfToken: "" }));
+      setForm((f) => ({ ...f, ninerouterKey: "", bridgeKey: "", cfToken: "", elevenlabsKey: "" }));
       setMsg("Tersimpan — langsung berlaku tanpa restart.");
     } catch (err) {
       setMsg(String(err.message || err));
@@ -140,8 +141,21 @@ export default function SettingsForm() {
       </Group>
 
       <Group
+        title="ElevenLabs"
+        desc="Voice over dari ElevenLabs (termasuk suara hasil kloning). Kunci ini langsung ke api.elevenlabs.io, tidak lewat 9Router. Pilihan suaranya muncul di Mesin VO saat membuat proyek."
+      >
+        <KeyField
+          label="API key"
+          name="elevenlabsKey"
+          isSet={view.elevenlabsKeySet}
+          value={form.elevenlabsKey}
+          onChange={set("elevenlabsKey")}
+        />
+      </Group>
+
+      <Group
         title="Cloudflare Workers AI"
-        desc="Penyedia gambar langsung ke Cloudflare (alternatif SDXL lewat 9Router)."
+        desc="Hanya untuk pilihan gambar 'Cloudflare Workers AI' (langsung). Pilihan 'Cloudflare SDXL via 9Router' memakai token Cloudflare yang tersimpan di dalam 9Router, bukan kolom ini."
       >
         <div>
           <label className={labelCls}>Account ID</label>
