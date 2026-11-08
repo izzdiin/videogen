@@ -290,6 +290,7 @@ export default function CreateForm() {
         <select value={imageProvider} onChange={(e) => setImageProvider(e.target.value)} className={inputCls} disabled={engine === "darkcard" || engine === "diagram" || (engine === "stickman" && stickStyle === "B1")}>
           <option value="pollinations">Pollinations (gratis, otomatis)</option>
           <option value="sdxl-9router">Cloudflare SDXL via 9Router</option>
+          <option value="venice">Venice (langsung)</option>
           <option value="muse-bridge">Muse (bridge) — dibuat Muse sendiri, lambat</option>
           <option value="upload">Unggah manual per scene</option>
         </select>

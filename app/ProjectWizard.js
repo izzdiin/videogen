@@ -473,6 +473,7 @@ export default function ProjectWizard({ initial }) {
             <select value={exec.imageProvider} onChange={(e) => setExec({ ...exec, imageProvider: e.target.value })} className={inputCls} disabled={project.engine === "darkcard" || project.engine === "diagram" || (project.engine === "stickman" && (project.stickStyle || "B1") === "B1")}>
               <option value="pollinations">Pollinations (gratis)</option>
               <option value="sdxl-9router">Cloudflare SDXL via 9Router</option>
+              <option value="venice">Venice (langsung)</option>
               <option value="muse-bridge">Muse (bridge) — dibuat Muse, lambat</option>
               <option value="upload">Unggah manual</option>
             </select>

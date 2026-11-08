@@ -44,6 +44,9 @@ export default function SettingsForm() {
     cfAccountId: "",
     cfToken: "",
     elevenlabsKey: "",
+    veniceBase: "",
+    veniceKey: "",
+    veniceImageModel: "",
   });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -55,6 +58,8 @@ export default function SettingsForm() {
       ninerouterBase: s.ninerouterBase,
       bridgeBase: s.bridgeBase,
       cfAccountId: s.cfAccountId,
+      veniceBase: s.veniceBase,
+      veniceImageModel: s.veniceImageModel,
     }));
   }
 
@@ -80,7 +85,7 @@ export default function SettingsForm() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal menyimpan.");
       applyView(data.settings);
-      setForm((f) => ({ ...f, ninerouterKey: "", bridgeKey: "", cfToken: "", elevenlabsKey: "" }));
+      setForm((f) => ({ ...f, ninerouterKey: "", bridgeKey: "", cfToken: "", elevenlabsKey: "", veniceKey: "" }));
       setMsg("Tersimpan — langsung berlaku tanpa restart.");
     } catch (err) {
       setMsg(String(err.message || err));
@@ -172,6 +177,39 @@ export default function SettingsForm() {
           isSet={view.cfTokenSet}
           value={form.cfToken}
           onChange={set("cfToken")}
+        />
+      </Group>
+
+      <Group
+        title="Venice"
+        desc="Penyedia gambar langsung ke api.venice.ai (tanpa 9Router), untuk pilihan gambar 'Venice (langsung)'. Model bawaan venice-sd35 menerima ukuran piksel sesuai rasio proyek; model keluarga Qwen Image di Venice memakai rasio, bukan piksel, dan akan ditolak endpoint-nya. Saldo dan limit bulanan API diatur di venice.ai/settings/api — saldo atau limit habis terbaca sebagai error 402."
+      >
+        <div>
+          <label className={labelCls}>Base URL endpoint</label>
+          <input
+            name="veniceBase"
+            value={form.veniceBase}
+            onChange={set("veniceBase")}
+            placeholder="https://api.venice.ai/api/v1"
+            className={inputCls}
+          />
+        </div>
+        <div>
+          <label className={labelCls}>Model gambar</label>
+          <input
+            name="veniceImageModel"
+            value={form.veniceImageModel}
+            onChange={set("veniceImageModel")}
+            placeholder="venice-sd35"
+            className={inputCls}
+          />
+        </div>
+        <KeyField
+          label="API key"
+          name="veniceKey"
+          isSet={view.veniceKeySet}
+          value={form.veniceKey}
+          onChange={set("veniceKey")}
         />
       </Group>
 

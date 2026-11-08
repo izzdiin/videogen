@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import { loadProject, saveProject, projectDir } from "../../../../../../../lib/store.js";
-import { generateImage, generateImageWorkersAI, generateImageVia9Router, generateImageViaBridge } from "../../../../../../../lib/ai.js";
+import { generateImage, generateImageWorkersAI, generateImageVia9Router, generateImageViaBridge, generateImageViaVenice } from "../../../../../../../lib/ai.js";
 import { b2ArtPrompt, b3ArtPrompt } from "../../../../../../../lib/stickman.js";
 import { slidesImagePrompt } from "../../../../../../../lib/visualStyles.js";
 import { editorialImagePrompt } from "../../../../../../../lib/editorial.js";
@@ -52,6 +52,9 @@ export async function POST(req, { params }) {
         } else if (provider === "workers-ai") {
           await generateImageWorkersAI(editorialImagePrompt(project, scene), path.join(projectDir(project.id), rel));
           scene.image = { status: "ready", file: rel, source: "workers-ai", updatedAt: new Date().toISOString() };
+        } else if (provider === "venice") {
+          await generateImageViaVenice(editorialImagePrompt(project, scene), path.join(projectDir(project.id), rel), project.aspect);
+          scene.image = { status: "ready", file: rel, source: "venice", updatedAt: new Date().toISOString() };
         } else {
           await generateImageVia9Router(editorialImagePrompt(project, scene), path.join(projectDir(project.id), rel), project.aspect);
           scene.image = { status: "ready", file: rel, source: "sdxl-9router", updatedAt: new Date().toISOString() };
@@ -65,6 +68,9 @@ export async function POST(req, { params }) {
         } else if (provider === "muse-bridge") {
           await generateImageViaBridge(artPrompt(scene), path.join(projectDir(project.id), rel), project.aspect);
           scene.image = { status: "ready", file: rel, source: "muse-bridge", updatedAt: new Date().toISOString() };
+        } else if (provider === "venice") {
+          await generateImageViaVenice(artPrompt(scene), path.join(projectDir(project.id), rel), project.aspect);
+          scene.image = { status: "ready", file: rel, source: "venice", updatedAt: new Date().toISOString() };
         } else {
           await generateImageVia9Router(artPrompt(scene), path.join(projectDir(project.id), rel), project.aspect);
           scene.image = { status: "ready", file: rel, source: "sdxl-9router", updatedAt: new Date().toISOString() };
@@ -78,6 +84,9 @@ export async function POST(req, { params }) {
       } else if (provider === "workers-ai") {
         await generateImageWorkersAI(slidesImagePrompt(project, scene), path.join(projectDir(project.id), rel));
         scene.image = { status: "ready", file: rel, source: "workers-ai", updatedAt: new Date().toISOString() };
+      } else if (provider === "venice") {
+        await generateImageViaVenice(slidesImagePrompt(project, scene), path.join(projectDir(project.id), rel), project.aspect);
+        scene.image = { status: "ready", file: rel, source: "venice", updatedAt: new Date().toISOString() };
       } else {
         const seed = Math.floor(Math.random() * 1_000_000);
         await generateImage(slidesImagePrompt(project, scene), path.join(projectDir(project.id), rel), seed, undefined, project.aspect);

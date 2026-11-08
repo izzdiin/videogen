@@ -13,12 +13,12 @@ export async function POST(req) {
   const patch = {};
   // URL / id fields: the form always submits the effective value it showed,
   // so a non-empty value simply becomes the stored override.
-  for (const k of ["ninerouterBase", "bridgeBase", "cfAccountId"]) {
+  for (const k of ["ninerouterBase", "bridgeBase", "cfAccountId", "veniceBase", "veniceImageModel"]) {
     if (typeof body[k] === "string" && body[k].trim()) patch[k] = body[k].trim();
   }
   // Key fields: empty means "keep the current one" — the browser never
   // receives the real key, so it cannot resubmit it.
-  for (const k of ["ninerouterKey", "bridgeKey", "cfToken", "elevenlabsKey"]) {
+  for (const k of ["ninerouterKey", "bridgeKey", "cfToken", "elevenlabsKey", "veniceKey"]) {
     if (typeof body[k] === "string" && body[k].trim()) patch[k] = body[k].trim();
   }
   saveSettings(patch);
