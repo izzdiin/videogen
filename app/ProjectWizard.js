@@ -278,6 +278,30 @@ export default function ProjectWizard({ initial }) {
       setDirty(false);
     });
 
+  // Simpan otomatis: perubahan naskah/prompt tersimpan sendiri ±1 detik
+  // setelah ketikan terakhir, tanpa menunggu tombol Simpan — edit yang
+  // belum tersimpan dulu hilang begitu halaman dimuat ulang atau aset
+  // dibuat dari prompt lama di server. Hasil PATCH tidak menimpa state
+  // scenes (pengguna bisa sedang mengetik lagi); dirty hanya dibersihkan
+  // bila tidak ada ketikan baru selama penyimpanan berjalan.
+  const scenesVerRef = useRef(0);
+  useEffect(() => { scenesVerRef.current += 1; }, [scenes]);
+  useEffect(() => {
+    if (!dirty) return;
+    const ver = scenesVerRef.current;
+    const t = setTimeout(async () => {
+      try {
+        const data = await jsonFetch(`/api/projects/${id}`, "PATCH", { scenes });
+        setProject(data.project);
+        if (scenesVerRef.current === ver) setDirty(false);
+      } catch (e) {
+        setError(String(e.message || e));
+      }
+    }, 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, scenes]);
+
   const saveExecutors = () =>
     call("saveExec", async () => {
       const data = await jsonFetch(`/api/projects/${id}`, "PATCH", { executors: exec });
@@ -729,6 +753,7 @@ export default function ProjectWizard({ initial }) {
           <button onClick={saveScenes} disabled={busy === "saveScenes" || !dirty} className={btnCls}>
             {dirty ? "Simpan perubahan *" : "Tersimpan"}
           </button>
+          {dirty && <span className="self-center text-xs text-white/40">perubahan tersimpan otomatis…</span>}
         </div>
         <div className="space-y-3">
           {scenes.map((s, i) => (
