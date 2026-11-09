@@ -34,11 +34,21 @@ export async function GET(req, { params }) {
           "Content-Range": `bytes ${start}-${end}/${size}`,
           "Accept-Ranges": "bytes",
           "Content-Length": String(buf.length),
+          "Cache-Control": "no-store",
         },
       });
     }
   }
   return new Response(fs.readFileSync(abs), {
-    headers: { "Content-Type": type, "Accept-Ranges": "bytes", "Content-Length": String(size) },
+    headers: {
+      "Content-Type": type,
+      "Accept-Ranges": "bytes",
+      "Content-Length": String(size),
+      // Aset scene selalu ditulis ulang pada path yang sama (mis.
+      // stills/<scene>.jpg). Tanpa no-store, browser menampilkan byte
+      // lama dari cache setelah generate ulang / unggah pengganti —
+      // seolah-olah unggahan tidak menggantikan gambar sebelumnya.
+      "Cache-Control": "no-store",
+    },
   });
 }

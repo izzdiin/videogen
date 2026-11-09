@@ -6,6 +6,7 @@ import { renderDarkcard } from "../../../../../lib/darkcard.js";
 import { renderDiagram } from "../../../../../lib/diagram.js";
 import { renderEditorial } from "../../../../../lib/editorial.js";
 import { activeJobs, startJobHeartbeat } from "../../../../../lib/jobs.js";
+import { postMixProject } from "../../../../../lib/audio.js";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,14 @@ export async function POST(req, { params }) {
         if (p) {
           p.job = { type: "render", status: "running", step: "rakit", message: m, at: new Date().toISOString() };
           saveProject(p);
+        }
+      });
+      // Mix akhir Audio Studio untuk mesin selain Slides.
+      await postMixProject(loadProject(project.id), kind, result, (m) => {
+        const pj = loadProject(project.id);
+        if (pj) {
+          pj.job = { type: "render", status: "running", step: "rakit", message: m, at: new Date().toISOString() };
+          saveProject(pj);
         }
       });
       const p = loadProject(project.id);

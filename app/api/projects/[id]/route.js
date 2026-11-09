@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { loadProject, saveProject, deleteProject, mergeScenes } from "../../../../lib/store.js";
 import { VISUAL_STYLE_IDS } from "../../../../lib/visualStyles.js";
+import { sanitizeAudioConfig } from "../../../../lib/audioPresets.js";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +53,10 @@ export async function PATCH(req, { params }) {
       options: (Array.isArray(body.poll.options) ? body.poll.options : [])
         .map((o) => String(o || "").slice(0, 24)).slice(0, 3),
     };
+  }
+  if (body.audio && typeof body.audio === "object") {
+    // Aset BGM dipertahankan dari server; klien hanya mengubah parameter.
+    project.audio = sanitizeAudioConfig(body.audio, project.audio?.bgm || { status: "none" });
   }
   if (["B1", "B2", "B3"].includes(body.stickStyle)) project.stickStyle = body.stickStyle;
   if (VISUAL_STYLE_IDS.includes(body.visualStyle)) project.visualStyle = body.visualStyle;

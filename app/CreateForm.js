@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { VOICES, GEMINI_VOICES, MUSE_VOICES, ELEVENLABS_VOICES, defaultVoice, defaultGeminiVoice, defaultClaudeVoice, defaultElevenLabsVoice } from "../lib/voices.js";
 import { VISUAL_STYLES } from "../lib/visualStyles.js";
+import { AUDIO_PRESETS } from "../lib/audioPresets.js";
 import ModelPicker from "./ModelPicker.js";
 import VoicePreview from "./VoicePreview.js";
 
@@ -25,6 +26,7 @@ export default function CreateForm() {
   const [captionStyle, setCaptionStyle] = useState("frasa");
   const [scriptTemplate, setScriptTemplate] = useState("");
   const [dgMode, setDgMode] = useState("akumulasi");
+  const [audioPreset, setAudioPreset] = useState("edukatif");
   const [plan, setPlan] = useState(null);
   const [planBusy, setPlanBusy] = useState(false);
   const [planError, setPlanError] = useState("");
@@ -110,6 +112,7 @@ export default function CreateForm() {
       voice,
       assembly: fd.get("assembly"),
       mode: fd.get("mode"),
+      audioPreset,
       director: planApplied && plan ? plan : undefined,
     };
     try {
@@ -413,6 +416,15 @@ export default function CreateForm() {
           <option value="server">Di server ini (ffmpeg)</option>
           <option value="export">Ekspor paket, rakit manual di PC saya</option>
         </select>
+      </div>
+      <div>
+        <label className={labelCls}>Preset audio (Audio Studio)</label>
+        <select value={audioPreset} onChange={(e) => setAudioPreset(e.target.value)} className={inputCls}>
+          {AUDIO_PRESETS.map((p) => (
+            <option key={p.id} value={p.id}>{p.label}</option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-white/40">Menentukan volume musik, fade in/out, jeda narasi, dan target loudness. Musik latarnya diunggah nanti di halaman proyek (tahap Audio Studio).</p>
       </div>
       <div>
         <label className={labelCls}>Mode kerja</label>

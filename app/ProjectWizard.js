@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { VOICES, GEMINI_VOICES, MUSE_VOICES, ELEVENLABS_VOICES, isGeminiVoice, isClaudeVoice, isElevenLabsVoice, defaultGeminiVoice, defaultClaudeVoice, defaultElevenLabsVoice, defaultVoice } from "../lib/voices.js";
 import { DC_ICONS } from "../lib/dc-icons.js";
 import { VISUAL_STYLES, flowVideoPrompt } from "../lib/visualStyles.js";
+import { AUDIO_PRESETS, audioFromPreset } from "../lib/audioPresets.js";
 import ModelPicker from "./ModelPicker.js";
 import VoicePreview from "./VoicePreview.js";
 
@@ -162,6 +163,7 @@ export default function ProjectWizard({ initial }) {
     },
   });
   const [stickStyle, setStickStyle] = useState(initial.stickStyle || "B1");
+  const [audioCfg, setAudioCfg] = useState(initial.audio || audioFromPreset("edukatif"));
   const [visualStyle, setVisualStyle] = useState(initial.visualStyle || "bebas");
   const [imgProv, setImgProv] = useState({});
   const [voProv, setVoProv] = useState({});
@@ -181,6 +183,11 @@ export default function ProjectWizard({ initial }) {
   const jobBusy = jobRunning && !jobStale;
 
   const fileUrl = (rel) => `/api/projects/${id}/files/${rel}`;
+  // URL pratinjau aset scene dengan penanda versi updatedAt: path berkas
+  // tidak berubah saat aset diganti (generate ulang / unggah), jadi tanpa
+  // penanda ini pratinjau bisa menampilkan aset lama.
+  const assetUrl = (asset) =>
+    asset?.file ? fileUrl(asset.file) + (asset.updatedAt ? `?v=${encodeURIComponent(asset.updatedAt)}` : "") : "";
 
   async function refresh() {
     const res = await fetch(`/api/projects/${id}`);
@@ -217,7 +224,7 @@ export default function ProjectWizard({ initial }) {
         setScenes((prev) =>
           prev.map((s) => {
             const fresh = data.project.scenes.find((x) => x.id === s.id);
-            return fresh ? { ...s, image: fresh.image, vo: fresh.vo, video: fresh.video } : s;
+            return fresh ? { ...s, image: fresh.image, vo: fresh.vo, video: fresh.video, sfx: fresh.sfx } : s;
           })
         );
       }
@@ -244,7 +251,7 @@ export default function ProjectWizard({ initial }) {
     setScenes((prev) =>
       prev.map((s) => {
         const fresh = respProject.scenes.find((x) => x.id === s.id);
-        return fresh ? { ...s, image: fresh.image, vo: fresh.vo, video: fresh.video } : s;
+        return fresh ? { ...s, image: fresh.image, vo: fresh.vo, video: fresh.video, sfx: fresh.sfx } : s;
       })
     );
   }
@@ -308,6 +315,64 @@ export default function ProjectWizard({ initial }) {
     call("saveExec", async () => {
       const data = await jsonFetch(`/api/projects/${id}`, "PATCH", { executors: exec });
       setProject(data.project);
+    });
+
+  // --- Audio Studio ---
+  const saveAudio = () =>
+    call("saveAudio", async () => {
+      const data = await jsonFetch(`/api/projects/${id}`, "PATCH", { audio: audioCfg });
+      setProject(data.project);
+      if (data.project.audio) setAudioCfg(data.project.audio);
+    });
+
+  const applyAudioPreset = (pid) => {
+    const p = audioFromPreset(pid);
+    setAudioCfg((prev) => ({ ...p, bgm: prev.bgm }));
+  };
+
+  const tweakAudio = (patch) => setAudioCfg((prev) => ({ ...prev, ...patch, preset: "kustom" }));
+
+  const uploadBgm = (file) => {
+    if (!file) return;
+    call("bgm", async () => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/projects/${id}/audio`, { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setProject(data.project);
+      if (data.project.audio) setAudioCfg(data.project.audio);
+    });
+  };
+
+  const deleteBgm = () =>
+    call("bgm", async () => {
+      const data = await jsonFetch(`/api/projects/${id}/audio`, "DELETE");
+      setProject(data.project);
+      if (data.project.audio) setAudioCfg(data.project.audio);
+    });
+
+  const updSceneAudio = (sid, patch) => {
+    setScenes((prev) => prev.map((s) => (s.id === sid ? { ...s, ...patch } : s)));
+    setDirty(true);
+  };
+
+  async function uploadSfx(scene, file) {
+    if (!file) return;
+    await call("sfx-" + scene.id, async () => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/projects/${id}/scenes/${scene.id}/sfx`, { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      applyAssetUpdate(data.project);
+    });
+  }
+
+  const deleteSfx = (scene) =>
+    call("sfx-" + scene.id, async () => {
+      const data = await jsonFetch(`/api/projects/${id}/scenes/${scene.id}/sfx`, "DELETE");
+      applyAssetUpdate(data.project);
     });
 
   const saveDc = () =>
@@ -1157,7 +1222,7 @@ export default function ProjectWizard({ initial }) {
                       <div className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Gambar latar{staleBadge(s.image)}</div>
                       <div className="relative mt-2 aspect-[9/16] max-h-60 overflow-hidden rounded bg-white/5">
                         {s.image?.status === "ready" ? (
-                          <img src={fileUrl(s.image.file)} alt={`Gambar scene ${i + 1}`} className="h-full w-full object-cover" />
+                          <img src={assetUrl(s.image)} alt={`Gambar scene ${i + 1}`} className="h-full w-full object-cover" />
                         ) : s.image?.status === "generating" ? (
                           <div className="flex h-full animate-pulse items-center justify-center px-3 text-center text-xs text-sky-300">
                             sedang dibuat…{assetStale(s.image) ? " (tampaknya terhenti — klik Generate untuk mencoba lagi)" : ""}
@@ -1189,7 +1254,7 @@ export default function ProjectWizard({ initial }) {
                       <div className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Video Google Flow (manual)</div>
                       {s.video?.status === "ready" ? (
                         <>
-                          <video controls src={fileUrl(s.video.file)} className="mt-2 max-h-60 w-full rounded bg-black" />
+                          <video controls src={assetUrl(s.video)} className="mt-2 max-h-60 w-full rounded bg-black" />
                           <div className="mt-1 text-xs text-emerald-300">
                             video siap{s.video.duration ? ` · ${s.video.duration.toFixed(1)} dtk` : ""}{s.video.hasAudio ? " · ada suara bawaan" : " · tanpa suara"}
                           </div>
@@ -1219,7 +1284,7 @@ export default function ProjectWizard({ initial }) {
             <div key={s.id} className="overflow-hidden rounded-lg border border-white/10 bg-black/20">
               <div className="relative aspect-[9/16] bg-white/5">
                 {s.image?.status === "ready" ? (
-                  <img src={fileUrl(s.image.file)} alt={`Scene ${i + 1}`} className="h-full w-full object-cover" />
+                  <img src={assetUrl(s.image)} alt={`Scene ${i + 1}`} className="h-full w-full object-cover" />
                 ) : s.image?.status === "generating" ? (
                   <div className="flex h-full animate-pulse items-center justify-center px-3 text-center text-xs text-sky-300">
                     sedang dibuat…{assetStale(s.image) ? " (tampaknya terhenti — klik Generate untuk mencoba lagi)" : ""}
@@ -1256,7 +1321,7 @@ export default function ProjectWizard({ initial }) {
               <span className="text-xs font-bold text-amber-300">SCENE {i + 1}</span>
               {s.vo?.status === "ready" ? (
                 <>
-                  <audio controls src={fileUrl(s.vo.file)} className="h-9 max-w-full" />
+                  <audio controls src={assetUrl(s.vo)} className="h-9 max-w-full" />
                   <span className="text-xs text-white/50">{s.vo.duration ? `${s.vo.duration.toFixed(1)} dtk` : ""}</span>
                   {staleBadge(s.vo)}
                 </>
@@ -1293,16 +1358,119 @@ export default function ProjectWizard({ initial }) {
                   <input type="file" accept="audio/*" className="hidden" onChange={(e) => uploadAsset(s, "vo", e.target.files?.[0])} />
                 </label>
               </span>
+              {project.engine === "slides" && (
+                <div className="flex basis-full flex-wrap items-center gap-2 border-t border-white/5 pt-2 text-xs text-white/50">
+                  <span className="font-semibold uppercase tracking-wide">SFX</span>
+                  {s.sfx?.status === "ready" ? (
+                    <>
+                      <span className="text-emerald-300">♪ {s.sfx.name || "efek suara"}</span>
+                      <button onClick={() => deleteSfx(s)} disabled={busy === "sfx-" + s.id} className={btnCls}>Hapus SFX</button>
+                    </>
+                  ) : (
+                    <label className={btnCls + " cursor-pointer"}>
+                      Unggah SFX
+                      <input type="file" accept="audio/*" className="hidden" onChange={(e) => uploadSfx(s, e.target.files?.[0])} />
+                    </label>
+                  )}
+                  <label className="flex items-center gap-1">Vol VO
+                    <input type="number" min={0} max={2} step={0.1} value={s.voVolume ?? 1} onChange={(e) => updSceneAudio(s.id, { voVolume: Number(e.target.value) })} className={inputCls} style={{ width: 64 }} />
+                  </label>
+                  <label className="flex items-center gap-1">Vol SFX
+                    <input type="number" min={0} max={2} step={0.1} value={s.sfxVolume ?? 0.9} onChange={(e) => updSceneAudio(s.id, { sfxVolume: Number(e.target.value) })} className={inputCls} style={{ width: 64 }} />
+                  </label>
+                  <label className="flex items-center gap-1">Musik scene %
+                    <input type="number" min={0} max={100} step={1} value={s.bgmVolume === null || s.bgmVolume === undefined ? "" : Math.round(s.bgmVolume * 100)} placeholder="proyek" onChange={(e) => updSceneAudio(s.id, { bgmVolume: e.target.value === "" ? null : Number(e.target.value) / 100 })} className={inputCls} style={{ width: 64 }} />
+                  </label>
+                  <span className="text-white/30">SFX berbunyi dari awal scene; perubahan volume tersimpan otomatis.</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
       </Section>
 
-      {/* Tahap 4 */}
-      <Section no={4} title="Perakitan" desc={project.engine === "stickman" ? `Render draf = pratinjau 20 detik pertama dari renderer stickman; render final = film penuh mengikuti rasio aspek proyek, dengan caption dan efek suara. Gaya aktif: ${project.stickStyle || "B1"}.` : project.engine === "darkcard" ? "Render draf = pratinjau 20 detik pertama; render final = film penuh mengikuti rasio aspek proyek, dengan tumpukan kartu, caption sorot, dan watermark." : project.engine === "diagram" ? "Render draf = pratinjau 20 detik pertama; render final = film penuh mengikuti rasio aspek proyek, dengan diagram yang dibangun bertahap, kamera menyapu, headline & pil status, subtitle karaoke, dan watermark." : project.engine === "editorial" ? "Render draf = pratinjau 20 detik pertama; render final = film penuh mengikuti rasio aspek proyek, dengan tipografi editorial, dorongan zoom pada gambar hero, dan penutup memudar ke putih. Editorial tidak memakai subtitle." : "Render draf (cepat, 540x960) untuk pratinjau, koreksi bila perlu, lalu render final 1080x1920."}>
+      {/* Audio Studio */}
+      <Section no={4} title="Audio Studio — musik & efek suara" desc="Musik latar diunggah sekali per proyek, lalu dicampur otomatis saat render: musik menunduk (ducking) selama narasi berbicara, fade in/out di awal dan akhir, dan normalisasi loudness ke target LUFS. SFX per scene, volume per scene, dan jeda antar scene berlaku untuk mesin Slides (diatur SFX-nya di tahap 3); mesin lain menerima campuran global (musik + fade + normalisasi).">
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <label className={labelCls}>Preset audio</label>
+            <select value={audioCfg.preset} onChange={(e) => { if (e.target.value !== "kustom") applyAudioPreset(e.target.value); }} className={inputCls}>
+              {AUDIO_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+              <option value="kustom">Kustom — parameter diubah manual</option>
+            </select>
+            <p className="mt-1 text-xs text-white/40">Preset mengisi semua parameter di panel ini; mengubah satu nilai saja sesudahnya menjadikan konfigurasi "Kustom".</p>
+          </div>
+          <div>
+            <label className={labelCls}>Musik latar (BGM)</label>
+            {project.audio?.bgm?.status === "ready" ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-emerald-300">♪ {project.audio.bgm.name || project.audio.bgm.file}</span>
+                <label className={btnCls + " cursor-pointer"}>
+                  Ganti
+                  <input type="file" accept="audio/*" className="hidden" onChange={(e) => uploadBgm(e.target.files?.[0])} />
+                </label>
+                <button onClick={deleteBgm} disabled={busy === "bgm"} className={btnCls}>Hapus</button>
+              </div>
+            ) : (
+              <label className={btnCls + " cursor-pointer inline-block"}>
+                {busy === "bgm" ? "Mengunggah..." : "Unggah musik latar"}
+                <input type="file" accept="audio/*" className="hidden" onChange={(e) => uploadBgm(e.target.files?.[0])} />
+              </label>
+            )}
+            <p className="mt-1 text-xs text-white/40">MP3/WAV/M4A/OGG milikmu, diloop sampai menutupi durasi video. Tanpa BGM pun fade + normalisasi tetap diterapkan ke narasi.</p>
+          </div>
+          <div>
+            <label className={labelCls}>Volume musik ({Math.round((audioCfg.bgmVolume ?? 0) * 100)}%)</label>
+            <input type="range" min={0} max={100} step={1} value={Math.round((audioCfg.bgmVolume ?? 0) * 100)} onChange={(e) => tweakAudio({ bgmVolume: Number(e.target.value) / 100 })} className="w-full" />
+          </div>
+          <div>
+            <label className={labelCls}>Volume narasi ({Math.round((audioCfg.voVolume ?? 1) * 100)}%)</label>
+            <input type="range" min={0} max={200} step={5} value={Math.round((audioCfg.voVolume ?? 1) * 100)} onChange={(e) => tweakAudio({ voVolume: Number(e.target.value) / 100 })} className="w-full" />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className={labelCls}>Fade in (dtk)</label>
+              <input type="number" min={0} max={15} step={0.1} value={audioCfg.fadeIn} onChange={(e) => tweakAudio({ fadeIn: Number(e.target.value) })} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Fade out (dtk)</label>
+              <input type="number" min={0} max={15} step={0.1} value={audioCfg.fadeOut} onChange={(e) => tweakAudio({ fadeOut: Number(e.target.value) })} className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Jeda narasi (dtk)</label>
+              <input type="number" min={0} max={3} step={0.05} value={audioCfg.gap} disabled={project.engine !== "slides"} onChange={(e) => tweakAudio({ gap: Number(e.target.value) })} className={inputCls} />
+              {project.engine !== "slides" && <p className="mt-1 text-xs text-white/40">Khusus Slides.</p>}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Normalisasi loudness</label>
+              <select value={audioCfg.normalize ? "ya" : "tidak"} onChange={(e) => tweakAudio({ normalize: e.target.value === "ya" })} className={inputCls}>
+                <option value="ya">Ya — samakan ke target LUFS</option>
+                <option value="tidak">Tidak</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Target (LUFS)</label>
+              <input type="number" min={-24} max={-12} step={1} value={audioCfg.targetLufs} onChange={(e) => tweakAudio({ targetLufs: Number(e.target.value) })} className={inputCls} />
+            </div>
+          </div>
+        </div>
+        <div className="mt-3">
+          <button onClick={saveAudio} disabled={busy === "saveAudio"} className={btnCls}>
+            {busy === "saveAudio" ? "Menyimpan..." : "Simpan pengaturan audio"}
+          </button>
+          <span className="ml-2 text-xs text-white/40">Ducking otomatis: rasio {audioCfg.duckRatio}:1 terhadap narasi. Volume per scene & SFX ada di tahap 3.</span>
+        </div>
+      </Section>
+
+      {/* Tahap 5 */}
+      <Section no={5} title="Perakitan" desc={project.engine === "stickman" ? `Render draf = pratinjau 20 detik pertama dari renderer stickman; render final = film penuh mengikuti rasio aspek proyek, dengan caption dan efek suara. Gaya aktif: ${project.stickStyle || "B1"}.` : project.engine === "darkcard" ? "Render draf = pratinjau 20 detik pertama; render final = film penuh mengikuti rasio aspek proyek, dengan tumpukan kartu, caption sorot, dan watermark." : project.engine === "diagram" ? "Render draf = pratinjau 20 detik pertama; render final = film penuh mengikuti rasio aspek proyek, dengan diagram yang dibangun bertahap, kamera menyapu, headline & pil status, subtitle karaoke, dan watermark." : project.engine === "editorial" ? "Render draf = pratinjau 20 detik pertama; render final = film penuh mengikuti rasio aspek proyek, dengan tipografi editorial, dorongan zoom pada gambar hero, dan penutup memudar ke putih. Editorial tidak memakai subtitle." : "Render draf (cepat, 540x960) untuk pratinjau, koreksi bila perlu, lalu render final 1080x1920."}>
         {exec.assembly === "export" && project.engine === "slides" ? (
           <div className="text-sm text-white/70">
-            Mode rakit manual dipilih. Unduh paket proyek di tahap 5 — berisi still, VO, naskah,
+            Mode rakit manual dipilih. Unduh paket proyek di tahap 6 — berisi still, VO, naskah,
             dan perintah ffmpeg (renders/commands.txt dibuat setelah render pertama; untuk paket awal,
             rakit dengan ffmpeg concat mengikuti urutan scene di project.json).
             <div className="mt-3">
@@ -1338,8 +1506,8 @@ export default function ProjectWizard({ initial }) {
         )}
       </Section>
 
-      {/* Tahap 5 */}
-      <Section no={5} title="Hasil & unduh" desc="Video final dan paket proyek untuk arsip atau rakit manual.">
+      {/* Tahap 6 */}
+      <Section no={6} title="Hasil & unduh" desc="Video final dan paket proyek untuk arsip atau rakit manual.">
         {project.renders?.final?.status === "done" ? (
           <div className="flex flex-wrap items-center gap-3">
             <a href={fileUrl(project.renders.final.file)} download className={btnAmber + " inline-block"}>Unduh MP4 final</a>
