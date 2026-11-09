@@ -17,6 +17,18 @@ export default function CreateForm() {
   const [stickStyle, setStickStyle] = useState("B1");
   const [visualStyle, setVisualStyle] = useState("bebas");
   const [imageProvider, setImageProvider] = useState("pollinations");
+  const [title, setTitle] = useState("");
+  const [theme, setTheme] = useState("");
+  const [aspect, setAspect] = useState("9:16");
+  const [targetDuration, setTargetDuration] = useState("55");
+  const [sceneCount, setSceneCount] = useState("6");
+  const [captionStyle, setCaptionStyle] = useState("frasa");
+  const [scriptTemplate, setScriptTemplate] = useState("");
+  const [dgMode, setDgMode] = useState("akumulasi");
+  const [plan, setPlan] = useState(null);
+  const [planBusy, setPlanBusy] = useState(false);
+  const [planError, setPlanError] = useState("");
+  const [planApplied, setPlanApplied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -27,6 +39,43 @@ export default function CreateForm() {
   function changeVoProvider(p) {
     setVoProvider(p);
     setVoice(p === "gemini-tts" ? defaultGeminiVoice() : p === "muse-bridge" ? defaultClaudeVoice() : p === "elevenlabs" ? defaultElevenLabsVoice() : defaultVoice(audience));
+  }
+
+  async function askDirector() {
+    setPlanBusy(true);
+    setPlanError("");
+    setPlan(null);
+    setPlanApplied(false);
+    try {
+      const res = await fetch("/api/director/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme, audience, model: scriptModel }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "AI Director gagal menyusun rencana.");
+      setPlan(data.plan);
+    } catch (err) {
+      setPlanError(String(err.message || err));
+    }
+    setPlanBusy(false);
+  }
+
+  function applyPlan() {
+    if (!plan) return;
+    setEngine(plan.mesin);
+    if (plan.gayaStickman) setStickStyle(plan.gayaStickman);
+    if (plan.modeDiagram) setDgMode(plan.modeDiagram);
+    if (plan.visual) setVisualStyle(plan.visual);
+    setAspect(plan.rasio);
+    setTargetDuration(String(plan.durasiDetik));
+    setSceneCount(String(plan.jumlahScene));
+    if (plan.gayaSubtitle) setCaptionStyle(plan.gayaSubtitle);
+    setScriptTemplate(plan.templateNaskah || "");
+    changeVoProvider(plan.voiceProvider);
+    setImageProvider(plan.penyediaGambar);
+    if (!title.trim() && plan.judulUsulan) setTitle(plan.judulUsulan);
+    setPlanApplied(true);
   }
 
   async function submit(e) {
@@ -61,6 +110,7 @@ export default function CreateForm() {
       voice,
       assembly: fd.get("assembly"),
       mode: fd.get("mode"),
+      director: planApplied && plan ? plan : undefined,
     };
     try {
       const res = await fetch("/api/projects", {
@@ -81,15 +131,71 @@ export default function CreateForm() {
     <form onSubmit={submit} className="grid gap-4 rounded-xl border border-white/10 bg-white/5 p-4 md:grid-cols-2">
       <div className="md:col-span-2">
         <label className={labelCls}>Judul proyek</label>
-        <input name="title" required placeholder="mis. Potensi Krisis Minyak" className={inputCls} />
+        <input name="title" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="mis. Potensi Krisis Minyak" className={inputCls} />
       </div>
       <div className="md:col-span-2">
         <label className={labelCls}>Tema / ide video</label>
-        <textarea name="theme" required rows={3} placeholder="Jelaskan ide videonya: topik, sudut pandang, data atau pesan utama..." className={inputCls} />
+        <textarea name="theme" required rows={3} value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="Jelaskan ide videonya: topik, sudut pandang, data atau pesan utama..." className={inputCls} />
+      </div>
+      <div className="md:col-span-2 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold">🎬 AI Director — Perencana Produksi Otomatis</div>
+            <p className="mt-0.5 text-xs text-white/40">
+              Tulis tema di atas, lalu biarkan AI Director menyusun strategi produksinya: kategori, target audiens, durasi, rasio, visual, mesin rendering, suara, subtitle, dan musik. Kamu tinggal meninjau dan menerapkan — tanpa perlu memahami semua mesin.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={planBusy || theme.trim().length < 8}
+            onClick={askDirector}
+            className="rounded-lg bg-amber-400 px-4 py-2 text-sm font-bold text-black hover:bg-amber-300 disabled:opacity-50"
+          >
+            {planBusy ? "Menyusun rencana..." : plan ? "Susun Ulang" : "Susun Rencana"}
+          </button>
+        </div>
+        {planError && <div className="mt-3 rounded-lg bg-red-500/15 px-3 py-2 text-sm text-red-300">{planError}</div>}
+        {plan && (
+          <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+            <div className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2">
+              {[
+                ["Kategori", plan.kategori],
+                ["Target audiens", plan.targetAudiensLabel],
+                ["Durasi", `${plan.durasiDetik} detik · ${plan.jumlahScene} scene`],
+                ["Rasio", plan.rasio],
+                ["Visual", plan.visualLabel || (plan.mesin === "stickman" ? `Stickman ${plan.gayaStickman}` : "Mengikuti mesin")],
+                ["Rendering", plan.mesinLabel + (plan.modeDiagram ? ` · mode ${plan.modeDiagram}` : "")],
+                ["Voice", plan.voiceLabel],
+                ["Subtitle", plan.gayaSubtitleLabel],
+                ["Musik", plan.musik],
+                ["Penyedia gambar", plan.penyediaGambarLabel],
+              ].map(([k, v]) => (
+                <div key={k} className="flex gap-2">
+                  <span className="w-32 shrink-0 text-white/40">{k}</span>
+                  <span className="font-medium">{v}</span>
+                </div>
+              ))}
+            </div>
+            {plan.alasan && <p className="mt-2 text-xs text-white/50">{plan.alasan}</p>}
+            <p className="mt-1 text-xs text-white/30">
+              Disusun oleh model {plan.modelDipakai}. Musik dicatat sebagai arahan suasana di rencana proyek — Videogen belum merender musik latar. Target audiens diteruskan ke penulis naskah agar nada narasi menyesuaikan.
+            </p>
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={applyPlan}
+                disabled={planApplied}
+                className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-bold text-black hover:bg-emerald-400 disabled:opacity-60"
+              >
+                {planApplied ? "✓ Rencana diterapkan — periksa formulir, lalu klik Buat Proyek" : "Terapkan Rencana ke Formulir"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       <div>
         <label className={labelCls}>Rasio aspek</label>
-        <select name="aspect" className={inputCls} defaultValue="9:16">
+        <select name="aspect" className={inputCls} value={aspect} onChange={(e) => setAspect(e.target.value)}>
           <option value="9:16">9:16 — vertikal (Reels/TikTok/Shorts)</option>
           <option value="1:1">1:1 — persegi (feed)</option>
           <option value="16:9">16:9 — lanskap (YouTube)</option>
@@ -106,11 +212,11 @@ export default function CreateForm() {
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelCls}>Durasi (detik)</label>
-          <input name="targetDuration" type="number" min={15} max={300} defaultValue={55} className={inputCls} />
+          <input name="targetDuration" type="number" min={15} max={300} value={targetDuration} onChange={(e) => setTargetDuration(e.target.value)} className={inputCls} />
         </div>
         <div>
           <label className={labelCls}>Jumlah scene</label>
-          <input name="sceneCount" type="number" min={2} max={20} defaultValue={6} className={inputCls} />
+          <input name="sceneCount" type="number" min={2} max={20} value={sceneCount} onChange={(e) => setSceneCount(e.target.value)} className={inputCls} />
         </div>
       </div>
       <div className="md:col-span-2">
@@ -225,7 +331,7 @@ export default function CreateForm() {
         <>
           <div>
             <label className={labelCls}>Gaya caption Slides</label>
-            <select name="captionStyle" className={inputCls} defaultValue="frasa">
+            <select name="captionStyle" className={inputCls} value={captionStyle} onChange={(e) => setCaptionStyle(e.target.value)}>
               <option value="frasa">Frasa — kotak subtitle biasa di bawah</option>
               <option value="satukata">Satu Kata — satu kata raksasa per ketukan (ala kartun 2D), satu kata disorot lime</option>
             </select>
@@ -233,7 +339,7 @@ export default function CreateForm() {
           </div>
           <div>
             <label className={labelCls}>Template naskah Slides</label>
-            <select name="scriptTemplate" className={inputCls} defaultValue="">
+            <select name="scriptTemplate" className={inputCls} value={scriptTemplate} onChange={(e) => setScriptTemplate(e.target.value)}>
               <option value="">Standar — alur hook → konteks → poin → penutup</option>
               <option value="andai">Andai-Andai — cerita "gimana kalau..." langkah demi langkah (ala what-if)</option>
             </select>
@@ -277,7 +383,7 @@ export default function CreateForm() {
           </div>
           <div>
             <label className={labelCls}>Mode Diagram</label>
-            <select name="dgMode" className={inputCls} defaultValue="akumulasi">
+            <select name="dgMode" className={inputCls} value={dgMode} onChange={(e) => setDgMode(e.target.value)}>
               <option value="akumulasi">Akumulasi — satu diagram dibangun bertahap (gaya asli)</option>
               <option value="bedah">Bedah — halaman diagram per scene + kartu angka besar (ala bedah sains)</option>
             </select>
