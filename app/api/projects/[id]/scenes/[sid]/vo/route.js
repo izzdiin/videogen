@@ -4,8 +4,39 @@ import { NextResponse } from "next/server";
 import { loadProject, saveProject, projectDir } from "../../../../../../../lib/store.js";
 import { synthesize, synthesizeGemini, synthesizeClaude, synthesizeElevenLabs, probeDuration } from "../../../../../../../lib/tts.js";
 import { isGeminiVoice, defaultGeminiVoice, isClaudeVoice, defaultClaudeVoice, isElevenLabsVoice, defaultElevenLabsVoice } from "../../../../../../../lib/voices.js";
+import { activeSceneJobs, sceneJobKey, SCENE_JOB_STALE_MS } from "../../../../../../../lib/jobs.js";
 
 export const dynamic = "force-dynamic";
+
+// Isi scene.vo dengan voice over hasil sintesis, sesuai mesin VO proyek.
+// Melempar Error bila gagal; penulisan status akhir ke project.json
+// diatur pemanggil.
+async function produceVo(project, scene, body) {
+  if (!scene.narration?.trim()) throw new Error("Teks narasi scene ini masih kosong.");
+  const rel = `vo/${scene.id}.mp3`;
+  const abs = path.join(projectDir(project.id), rel);
+  if ((project.executors.voProvider || "edge-tts") === "muse-bridge") {
+    const wanted = body.voice || project.executors.voice;
+    const voice = isClaudeVoice(wanted) ? wanted : defaultClaudeVoice();
+    const { duration } = await synthesizeClaude(scene.narration, voice, abs, project.audience === "en" ? "en" : "id");
+    scene.vo = { status: "ready", file: rel, duration, source: "muse-bridge", updatedAt: new Date().toISOString() };
+  } else if ((project.executors.voProvider || "edge-tts") === "gemini-tts") {
+    const voice = isGeminiVoice(project.executors.voice) ? project.executors.voice : defaultGeminiVoice();
+    const { duration } = await synthesizeGemini(scene.narration, voice, abs);
+    scene.vo = { status: "ready", file: rel, duration, source: "gemini-tts", updatedAt: new Date().toISOString() };
+  } else if ((project.executors.voProvider || "edge-tts") === "elevenlabs") {
+    const voice = isElevenLabsVoice(project.executors.voice) ? project.executors.voice : defaultElevenLabsVoice();
+    const { duration } = await synthesizeElevenLabs(scene.narration, voice, abs);
+    scene.vo = { status: "ready", file: rel, duration, source: "elevenlabs", updatedAt: new Date().toISOString() };
+  } else {
+    const { duration } = await synthesize(
+      scene.narration,
+      body.voice || project.executors.voice,
+      abs
+    );
+    scene.vo = { status: "ready", file: rel, duration, source: "edge-tts", updatedAt: new Date().toISOString() };
+  }
+}
 
 export async function POST(req, { params }) {
   const project = loadProject(params.id);
@@ -34,35 +65,52 @@ export async function POST(req, { params }) {
       fs.writeFileSync(abs, Buffer.from(await file.arrayBuffer()));
       const duration = await probeDuration(abs);
       scene.vo = { status: "ready", file: rel, duration, source: "upload", updatedAt: new Date().toISOString() };
-    } else {
-      const body = await req.json().catch(() => ({}));
-      if (!scene.narration?.trim()) throw new Error("Teks narasi scene ini masih kosong.");
-      const rel = `vo/${scene.id}.mp3`;
-      const abs = path.join(projectDir(project.id), rel);
-      if ((project.executors.voProvider || "edge-tts") === "muse-bridge") {
-        const wanted = body.voice || project.executors.voice;
-        const voice = isClaudeVoice(wanted) ? wanted : defaultClaudeVoice();
-        const { duration } = await synthesizeClaude(scene.narration, voice, abs, project.audience === "en" ? "en" : "id");
-        scene.vo = { status: "ready", file: rel, duration, source: "muse-bridge", updatedAt: new Date().toISOString() };
-      } else if ((project.executors.voProvider || "edge-tts") === "gemini-tts") {
-        const voice = isGeminiVoice(project.executors.voice) ? project.executors.voice : defaultGeminiVoice();
-        const { duration } = await synthesizeGemini(scene.narration, voice, abs);
-        scene.vo = { status: "ready", file: rel, duration, source: "gemini-tts", updatedAt: new Date().toISOString() };
-      } else if ((project.executors.voProvider || "edge-tts") === "elevenlabs") {
-        const voice = isElevenLabsVoice(project.executors.voice) ? project.executors.voice : defaultElevenLabsVoice();
-        const { duration } = await synthesizeElevenLabs(scene.narration, voice, abs);
-        scene.vo = { status: "ready", file: rel, duration, source: "elevenlabs", updatedAt: new Date().toISOString() };
-      } else {
-        const { duration } = await synthesize(
-          scene.narration,
-          body.voice || project.executors.voice,
-          abs
-        );
-        scene.vo = { status: "ready", file: rel, duration, source: "edge-tts", updatedAt: new Date().toISOString() };
-      }
+      saveProject(project);
+      return NextResponse.json({ project });
     }
+
+    // Jalur generate (JSON): sama seperti gambar per scene, sintesis bisa
+    // makan waktu lama (muse-bridge menunggu sampai 25 menit), jadi
+    // pekerjaan berjalan di latar belakang server dan handler kembali
+    // segera. Klien memantau status scene.vo: generating → ready/error.
+    const body = await req.json().catch(() => ({}));
+    if (!scene.narration?.trim()) throw new Error("Teks narasi scene ini masih kosong.");
+    const key = sceneJobKey(project.id, scene.id, "vo");
+    const runningAt = activeSceneJobs.get(key);
+    if (runningAt && Date.now() - new Date(runningAt).getTime() < SCENE_JOB_STALE_MS) {
+      return NextResponse.json({ project, started: false, generating: true });
+    }
+    scene.vo = { status: "generating", startedAt: new Date().toISOString() };
     saveProject(project);
-    return NextResponse.json({ project });
+    activeSceneJobs.set(key, new Date().toISOString());
+    (async () => {
+      try {
+        const p = loadProject(project.id);
+        const s = p?.scenes.find((x) => x.id === scene.id);
+        if (!p || !s) return;
+        await produceVo(p, s, body);
+        const pf = loadProject(project.id);
+        const sf = pf?.scenes.find((x) => x.id === scene.id);
+        // Tulis hasil hanya bila status masih "generating": unggahan
+        // manual di tengah jalan tidak boleh tertimpa hasil generate.
+        if (sf && sf.vo?.status === "generating") {
+          sf.vo = s.vo;
+          saveProject(pf);
+        }
+      } catch (e) {
+        try {
+          const pf = loadProject(project.id);
+          const sf = pf?.scenes.find((x) => x.id === scene.id);
+          if (sf && sf.vo?.status === "generating") {
+            sf.vo = { status: "error", error: String(e.message || e), updatedAt: new Date().toISOString() };
+            saveProject(pf);
+          }
+        } catch {}
+      } finally {
+        activeSceneJobs.delete(key);
+      }
+    })().catch(() => {});
+    return NextResponse.json({ project, started: true }, { status: 202 });
   } catch (e) {
     return NextResponse.json({ error: String(e.message || e) }, { status: 502 });
   }

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { VOICES, GEMINI_VOICES, MUSE_VOICES, ELEVENLABS_VOICES, isGeminiVoice, isClaudeVoice, isElevenLabsVoice, defaultGeminiVoice, defaultClaudeVoice, defaultElevenLabsVoice, defaultVoice } from "../lib/voices.js";
 import { DC_ICONS } from "../lib/dc-icons.js";
-import { VISUAL_STYLES } from "../lib/visualStyles.js";
+import { VISUAL_STYLES, flowVideoPrompt } from "../lib/visualStyles.js";
 import ModelPicker from "./ModelPicker.js";
 import VoicePreview from "./VoicePreview.js";
 
@@ -24,6 +24,22 @@ const DG_FLOWS = [["panas", "Panas (oranye-merah)"], ["aliran", "Aliran (teal)"]
 const DG_CABLES = [["blue", "Biru (alur normal)"], ["gold", "Emas (data disalin)"], ["red", "Merah (bahaya)"], ["green", "Hijau (aman)"], ["grey", "Abu (netral)"]];
 const DG_STEPS = [["todo", "… belum"], ["ask", "? diproses / ditanya"], ["ok", "✓ selesai / disetujui"], ["bad", "✗ gagal / ditolak"]];
 const ENGINE_LABEL = { darkcard: "Dark Card", slides: "Slides", diagram: "Diagram", editorial: "Editorial" };
+
+function CopyBtn({ text, label }) {
+  const [done, setDone] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text || "");
+      setDone(true);
+      setTimeout(() => setDone(false), 2000);
+    } catch {}
+  }
+  return (
+    <button type="button" onClick={copy} disabled={!text} className={btnCls}>
+      {done ? "Tersalin ✓" : label}
+    </button>
+  );
+}
 
 function VoRecorder({ onDone, disabled }) {
   const [phase, setPhase] = useState("idle"); // idle | recording | ready
@@ -147,6 +163,7 @@ export default function ProjectWizard({ initial }) {
   });
   const [stickStyle, setStickStyle] = useState(initial.stickStyle || "B1");
   const [visualStyle, setVisualStyle] = useState(initial.visualStyle || "bebas");
+  const [visualSource, setVisualSource] = useState(initial.visualSource || "gambar");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -181,12 +198,51 @@ export default function ProjectWizard({ initial }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobRunning]);
 
+  // Sinkronisasi tampilan dengan keadaan di server: status aset berubah
+  // juga dari tab/browser lain dan dari pekerjaan latar server (generate
+  // per scene kini berjalan di server, bukan menunggu fetch). Tab yang
+  // kembali fokus langsung menyegarkan; tab yang terbuka menyegarkan
+  // berkala; selama ada scene berstatus "generating" dipercepat.
+  async function refreshAssets() {
+    try {
+      const res = await fetch(`/api/projects/${id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setProject(data.project);
+      if (!dirtyRef.current) {
+        setScenes(data.project.scenes);
+      } else {
+        setScenes((prev) =>
+          prev.map((s) => {
+            const fresh = data.project.scenes.find((x) => x.id === s.id);
+            return fresh ? { ...s, image: fresh.image, vo: fresh.vo, video: fresh.video } : s;
+          })
+        );
+      }
+    } catch {}
+  }
+
+  const anyGenerating = scenes.some((s) => s.image?.status === "generating" || s.vo?.status === "generating");
+
+  useEffect(() => {
+    const onWake = () => { if (document.visibilityState === "visible") refreshAssets(); };
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    const t = setInterval(() => { if (document.visibilityState === "visible") refreshAssets(); }, anyGenerating ? 4000 : 15000);
+    return () => {
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyGenerating]);
+
   function applyAssetUpdate(respProject) {
     setProject(respProject);
     setScenes((prev) =>
       prev.map((s) => {
         const fresh = respProject.scenes.find((x) => x.id === s.id);
-        return fresh ? { ...s, image: fresh.image, vo: fresh.vo } : s;
+        return fresh ? { ...s, image: fresh.image, vo: fresh.vo, video: fresh.video } : s;
       })
     );
   }
@@ -271,6 +327,13 @@ export default function ProjectWizard({ initial }) {
       const data = await jsonFetch(`/api/projects/${id}`, "PATCH", { visualStyle });
       setProject(data.project);
       setVisualStyle(data.project.visualStyle || visualStyle);
+    });
+
+  const saveFlowSrc = () =>
+    call("saveFlowSrc", async () => {
+      const data = await jsonFetch(`/api/projects/${id}`, "PATCH", { visualSource });
+      setProject(data.project);
+      setVisualSource(data.project.visualSource || visualSource);
     });
 
   const genScript = () =>
@@ -387,6 +450,14 @@ export default function ProjectWizard({ initial }) {
     asset?.stale ? (
       <span className="ml-2 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-300">perlu dibuat ulang</span>
     ) : null;
+
+  // Status "generating" yang fosil: pekerjaan latar di server mati di
+  // tengah jalan (mis. container restart) sehingga status tidak pernah
+  // berubah. Setelah 35 menit tombol generate boleh dipakai lagi.
+  const assetStale = (asset) =>
+    asset?.status === "generating" &&
+    asset?.startedAt &&
+    Date.now() - new Date(asset.startedAt).getTime() > 35 * 60 * 1000;
 
   return (
     <div className="space-y-5">
@@ -522,6 +593,21 @@ export default function ProjectWizard({ initial }) {
             </div>
             <p className="mt-1 text-xs text-white/40">
               Preset mengarahkan prompt gambar tiap scene dan catatan gaya untuk penulis naskah. Berlaku untuk gambar yang dibuat setelah perubahan; gambar yang sudah jadi tidak berubah — generate ulang gambarnya untuk menerapkan gaya baru.
+            </p>
+          </div>
+        )}
+        {project.engine === "slides" && (
+          <div className="mt-4 border-t border-white/10 pt-3">
+            <label className={labelCls}>Sumber visual scene</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={visualSource} onChange={(e) => setVisualSource(e.target.value)} className={inputCls + " max-w-md"}>
+                <option value="gambar">Gambar AI — dibuat penyedia gambar di tahap 2</option>
+                <option value="flow">Video Google Flow — manual (salin prompt, buat di Flow, unggah klip)</option>
+              </select>
+              <button onClick={saveFlowSrc} disabled={busy === "saveFlowSrc"} className={btnCls}>Simpan sumber visual</button>
+            </div>
+            <p className="mt-1 text-xs text-white/40">
+              Mode Flow: tahap 2 berubah menjadi daftar prompt siap salin per scene untuk Google Flow beserta tempat unggah klip hasil unduhanmu. Saat rakit, klip menjadi visual scene; VO dari tahap 3 tetap dipasang (suara bawaan klip dipakai hanya bila scene belum punya VO).
             </p>
           </div>
         )}
@@ -934,7 +1020,7 @@ export default function ProjectWizard({ initial }) {
       </Section>
 
       {/* Tahap 2 */}
-      <Section no={2} title={project.engine === "stickman" ? (["B2", "B3"].includes(project.stickStyle || "B1") ? "Ilustrasi scene" : "Properti & pose") : project.engine === "darkcard" ? "Tumpukan kartu" : project.engine === "diagram" ? "Diagram" : project.engine === "editorial" ? "Gambar hero" : "Gambar latar"} desc={project.engine === "stickman" ? ((project.stickStyle || "B1") === "B3" ? "Setiap scene B3 adalah ilustrasi siluet putih/abu satu frame penuh (SDXL) di bidang nyaris hitam dari arahan gambar di tahap 1, atau unggah ilustrasimu sendiri. Tanpa ilustrasi, scene tampil sebagai judul di atas bidang gelap." : (project.stickStyle || "B1") === "B2" ? "Setiap scene B2 adalah ilustrasi warna satu frame penuh (SDXL, gaya hand-drawn di kertas krem) dari arahan gambar di tahap 1, atau unggah ilustrasimu sendiri. Tanpa ilustrasi, scene tampil sebagai judul di atas kertas krem." : "Mode stickman digambar dari pose karakter dan properti crayon bawaan B1 yang dipilih di tahap 1. Properti khusus dibuat otomatis (SDXL gaya crayon) saat mode otomatis berjalan atau sebelum render.") : project.engine === "darkcard" ? "Dark Card tidak memakai gambar: setiap scene menambah satu kartu ke tumpukan yang tampil terus. Urutan tumpukan mengikuti urutan scene; kartu diatur di tahap 1." : project.engine === "diagram" ? "Diagram tidak memakai gambar: satu diagram vektor dibangun bertahap — komponen muncul dan tersambung kabel mengikuti perintah tiap scene dari tahap 1, kamera menyapu ke bagian yang baru. Ringkasan keadaan diagram per scene:" : project.engine === "editorial" ? "Setiap scene Editorial adalah SATU gambar objek hero dari arahan gambar di tahap 1 (gaya kolase editorial ditambahkan otomatis), atau unggah gambarmu sendiri — paling bagus objek tunggal di latar polos krem. Tanpa gambar, scene tidak bisa dirender." : "Generate per scene dari prompt di tahap 1, atau unggah gambar sendiri (potret 9:16 disarankan)."}>
+      <Section no={2} title={project.engine === "stickman" ? (["B2", "B3"].includes(project.stickStyle || "B1") ? "Ilustrasi scene" : "Properti & pose") : project.engine === "darkcard" ? "Tumpukan kartu" : project.engine === "diagram" ? "Diagram" : project.engine === "editorial" ? "Gambar hero" : project.engine === "slides" && visualSource === "flow" ? "Video Flow (manual)" : "Gambar latar"} desc={project.engine === "stickman" ? ((project.stickStyle || "B1") === "B3" ? "Setiap scene B3 adalah ilustrasi siluet putih/abu satu frame penuh (SDXL) di bidang nyaris hitam dari arahan gambar di tahap 1, atau unggah ilustrasimu sendiri. Tanpa ilustrasi, scene tampil sebagai judul di atas bidang gelap." : (project.stickStyle || "B1") === "B2" ? "Setiap scene B2 adalah ilustrasi warna satu frame penuh (SDXL, gaya hand-drawn di kertas krem) dari arahan gambar di tahap 1, atau unggah ilustrasimu sendiri. Tanpa ilustrasi, scene tampil sebagai judul di atas kertas krem." : "Mode stickman digambar dari pose karakter dan properti crayon bawaan B1 yang dipilih di tahap 1. Properti khusus dibuat otomatis (SDXL gaya crayon) saat mode otomatis berjalan atau sebelum render.") : project.engine === "darkcard" ? "Dark Card tidak memakai gambar: setiap scene menambah satu kartu ke tumpukan yang tampil terus. Urutan tumpukan mengikuti urutan scene; kartu diatur di tahap 1." : project.engine === "diagram" ? "Diagram tidak memakai gambar: satu diagram vektor dibangun bertahap — komponen muncul dan tersambung kabel mengikuti perintah tiap scene dari tahap 1, kamera menyapu ke bagian yang baru. Ringkasan keadaan diagram per scene:" : project.engine === "editorial" ? "Setiap scene Editorial adalah SATU gambar objek hero dari arahan gambar di tahap 1 (gaya kolase editorial ditambahkan otomatis), atau unggah gambarmu sendiri — paling bagus objek tunggal di latar polos krem. Tanpa gambar, scene tidak bisa dirender." : project.engine === "slides" && visualSource === "flow" ? "Mode Flow manual: video tiap scene kamu buat sendiri di Google Flow dari prompt siap salin di bawah, lalu klip unduhannya kamu unggah di sini untuk dirakit menjadi satu video." : "Generate per scene dari prompt di tahap 1, atau unggah gambar sendiri (potret 9:16 disarankan)."}>
         {dirty && <p className="mb-2 text-xs text-amber-300">Ada perubahan naskah belum disimpan — generate memakai prompt yang tersimpan di server.</p>}
         {project.engine === "stickman" && (project.stickStyle || "B1") === "B1" ? (
           <div className="space-y-2">
@@ -1028,6 +1114,47 @@ export default function ProjectWizard({ initial }) {
             })()}
             {scenes.length === 0 && <p className="text-sm text-white/50">Belum ada naskah.</p>}
           </div>
+        ) : project.engine === "slides" && visualSource === "flow" ? (
+          <div className="space-y-3">
+            <p className="text-xs text-white/50">
+              Alurnya: salin prompt scene, buat videonya di Google Flow (flow.google), unduh MP4 hasilnya, lalu unggah di kartu scene ini.
+              Rasio dan durasi sudah tertulis di dalam prompt. Kerjakan semua scene, lalu rakit di tahap 4 — overlay judul, caption, dan VO
+              dari tahap 3 tetap ditambahkan saat rakit, sama seperti mode gambar.
+            </p>
+            {scenes.map((s, i) => (
+              <div key={s.id} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-amber-300">SCENE {i + 1}</span>
+                  {s.video?.status === "ready" ? (
+                    <span className="text-xs text-emerald-300">
+                      video siap{s.video.duration ? ` · ${s.video.duration.toFixed(1)} dtk` : ""}{s.video.hasAudio ? " · ada suara bawaan" : " · tanpa suara"}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-white/40">belum ada video</span>
+                  )}
+                  <span className="ml-auto flex gap-1">
+                    <label className={btnCls + " cursor-pointer"}>
+                      {s.video?.status === "ready" ? "Unggah ulang" : "Unggah video"}
+                      <input type="file" accept="video/*" className="hidden" onChange={(e) => uploadAsset(s, "video", e.target.files?.[0])} />
+                    </label>
+                  </span>
+                </div>
+                {s.video?.status === "ready" && (
+                  <video controls src={fileUrl(s.video.file)} className="mt-2 max-h-64 rounded bg-black" />
+                )}
+                <div className="mt-3">
+                  <label className={labelCls}>Prompt untuk Google Flow</label>
+                  <textarea readOnly rows={4} value={flowVideoPrompt(project, s)} className={inputCls} />
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    <CopyBtn text={flowVideoPrompt(project, s)} label="Salin prompt" />
+                    <CopyBtn text={s.narration || ""} label="Salin naskah" />
+                  </div>
+                </div>
+                {s.narration && <p className="mt-2 text-xs text-white/40">Naskah scene: {s.narration}</p>}
+              </div>
+            ))}
+            {scenes.length === 0 && <p className="text-sm text-white/50">Belum ada naskah.</p>}
+          </div>
         ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {scenes.map((s, i) => (
@@ -1035,6 +1162,12 @@ export default function ProjectWizard({ initial }) {
               <div className="relative aspect-[9/16] bg-white/5">
                 {s.image?.status === "ready" ? (
                   <img src={fileUrl(s.image.file)} alt={`Scene ${i + 1}`} className="h-full w-full object-cover" />
+                ) : s.image?.status === "generating" ? (
+                  <div className="flex h-full animate-pulse items-center justify-center px-3 text-center text-xs text-sky-300">
+                    sedang dibuat…{assetStale(s.image) ? " (tampaknya terhenti — klik Generate untuk mencoba lagi)" : ""}
+                  </div>
+                ) : s.image?.status === "error" ? (
+                  <div className="flex h-full items-center justify-center px-3 text-center text-xs text-red-300">gagal: {s.image.error || "coba lagi"}</div>
                 ) : (
                   <div className="flex h-full items-center justify-center text-xs text-white/40">belum ada gambar</div>
                 )}
@@ -1042,8 +1175,8 @@ export default function ProjectWizard({ initial }) {
               <div className="p-2">
                 <div className="text-xs font-semibold">Scene {i + 1}{staleBadge(s.image)}</div>
                 <div className="mt-2 flex flex-wrap gap-1">
-                  <button onClick={() => genImage(s)} disabled={busy === "img-" + s.id || !s.imagePrompt || exec.imageProvider === "upload"} className={btnCls} title={exec.imageProvider === "upload" ? "Penyedia gambar: unggah manual" : ""}>
-                    {busy === "img-" + s.id ? "Membuat..." : s.image?.status === "ready" ? "Generate ulang" : "Generate"}
+                  <button onClick={() => genImage(s)} disabled={busy === "img-" + s.id || !s.imagePrompt || exec.imageProvider === "upload" || (s.image?.status === "generating" && !assetStale(s.image))} className={btnCls} title={exec.imageProvider === "upload" ? "Penyedia gambar: unggah manual" : ""}>
+                    {busy === "img-" + s.id ? "Membuat..." : s.image?.status === "generating" && !assetStale(s.image) ? "Sedang dibuat…" : s.image?.status === "ready" ? "Generate ulang" : "Generate"}
                   </button>
                   <label className={btnCls + " cursor-pointer"}>
                     Unggah
@@ -1069,12 +1202,16 @@ export default function ProjectWizard({ initial }) {
                   <span className="text-xs text-white/50">{s.vo.duration ? `${s.vo.duration.toFixed(1)} dtk` : ""}</span>
                   {staleBadge(s.vo)}
                 </>
+              ) : s.vo?.status === "generating" ? (
+                <span className="text-xs text-sky-300">sedang dibuat…{assetStale(s.vo) ? " (tampaknya terhenti — klik Generate VO untuk mencoba lagi)" : ""}</span>
+              ) : s.vo?.status === "error" ? (
+                <span className="text-xs text-red-300">gagal: {s.vo.error || "coba lagi"}</span>
               ) : (
                 <span className="text-xs text-white/40">belum ada VO</span>
               )}
               <span className="ml-auto flex flex-wrap gap-1">
-                <button onClick={() => genVo(s)} disabled={busy === "vo-" + s.id || !s.narration} className={btnCls}>
-                  {busy === "vo-" + s.id ? "Membuat..." : s.vo?.status === "ready" ? "Generate ulang" : "Generate VO"}
+                <button onClick={() => genVo(s)} disabled={busy === "vo-" + s.id || !s.narration || (s.vo?.status === "generating" && !assetStale(s.vo))} className={btnCls}>
+                  {busy === "vo-" + s.id ? "Membuat..." : s.vo?.status === "generating" && !assetStale(s.vo) ? "Sedang dibuat…" : s.vo?.status === "ready" ? "Generate ulang" : "Generate VO"}
                 </button>
                 <VoRecorder onDone={(f) => uploadAsset(s, "vo", f)} disabled={busy === "vo-" + s.id} />
                 <label className={btnCls + " cursor-pointer"}>

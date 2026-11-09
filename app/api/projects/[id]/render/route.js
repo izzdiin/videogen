@@ -27,10 +27,13 @@ export async function POST(req, { params }) {
     }
   }
   if (project.engine !== "stickman" && project.engine !== "darkcard" && project.engine !== "diagram") {
-    const missing = project.scenes.findIndex((s) => s.image?.status !== "ready");
+    const flowMode = project.engine === "slides" && project.visualSource === "flow";
+    const missing = flowMode
+      ? project.scenes.findIndex((s) => s.video?.status !== "ready")
+      : project.scenes.findIndex((s) => s.image?.status !== "ready");
     if (missing >= 0) {
       return NextResponse.json(
-        { error: `Scene ${missing + 1} belum punya gambar latar.` },
+        { error: flowMode ? `Scene ${missing + 1} belum punya video Flow.` : `Scene ${missing + 1} belum punya gambar latar.` },
         { status: 400 }
       );
     }

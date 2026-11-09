@@ -55,6 +55,7 @@ export async function PATCH(req, { params }) {
   }
   if (["B1", "B2", "B3"].includes(body.stickStyle)) project.stickStyle = body.stickStyle;
   if (VISUAL_STYLE_IDS.includes(body.visualStyle)) project.visualStyle = body.visualStyle;
+  if (["gambar", "flow"].includes(body.visualSource)) project.visualSource = body.visualSource;
   if (Array.isArray(body.scenes)) mergeScenes(project, body.scenes);
   saveProject(project);
   return NextResponse.json({ project });
