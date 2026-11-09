@@ -52,6 +52,9 @@ export async function PATCH(req, { params }) {
       question: String(body.poll.question || "").slice(0, 90),
       options: (Array.isArray(body.poll.options) ? body.poll.options : [])
         .map((o) => String(o || "").slice(0, 24)).slice(0, 3),
+      voText: String(body.poll.voText ?? project.poll?.voText ?? "").slice(0, 300),
+      // Aset VO polling hanya berubah lewat route khususnya.
+      vo: project.poll?.vo || { status: "none" },
     };
   }
   if (body.audio && typeof body.audio === "object") {

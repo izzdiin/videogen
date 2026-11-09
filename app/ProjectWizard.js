@@ -160,6 +160,7 @@ export default function ProjectWizard({ initial }) {
     poll: {
       question: initial.poll?.question || "",
       options: [0, 1, 2].map((k) => (initial.poll?.options || [])[k] || ""),
+      voText: initial.poll?.voText || "",
     },
   });
   const [stickStyle, setStickStyle] = useState(initial.stickStyle || "B1");
@@ -231,7 +232,9 @@ export default function ProjectWizard({ initial }) {
     } catch {}
   }
 
-  const anyGenerating = scenes.some((s) => s.image?.status === "generating" || s.vo?.status === "generating");
+  const anyGenerating =
+    scenes.some((s) => s.image?.status === "generating" || s.vo?.status === "generating") ||
+    project.poll?.vo?.status === "generating";
 
   useEffect(() => {
     const onWake = () => { if (document.visibilityState === "visible") refreshAssets(); };
@@ -375,6 +378,39 @@ export default function ProjectWizard({ initial }) {
       applyAssetUpdate(data.project);
     });
 
+  // --- VO kartu polling ---
+  // Generate menyimpan dulu pengaturan polling (teks VO dibaca server
+  // dari proyek tersimpan), baru meminta sintesis.
+  const genPollVo = () =>
+    call("pollVo", async () => {
+      await jsonFetch(`/api/projects/${id}`, "PATCH", {
+        captionStyle: slCfg.captionStyle,
+        scriptTemplate: slCfg.scriptTemplate,
+        poll: { question: slCfg.poll.question, options: slCfg.poll.options.map((o) => String(o || "").trim()), voText: slCfg.poll.voText },
+      });
+      const prov = voProv.poll || exec.voProvider || "edge-tts";
+      const data = await jsonFetch(`/api/projects/${id}/poll/vo`, "POST", { provider: prov, voice: voVoice.poll || exec.voice });
+      setProject(data.project);
+    });
+
+  async function uploadPollVo(file) {
+    if (!file) return;
+    await call("pollVo", async () => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/projects/${id}/poll/vo`, { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setProject(data.project);
+    });
+  }
+
+  const deletePollVo = () =>
+    call("pollVo", async () => {
+      const data = await jsonFetch(`/api/projects/${id}/poll/vo`, "DELETE");
+      setProject(data.project);
+    });
+
   const saveDc = () =>
     call("saveDc", async () => {
       const data = await jsonFetch(`/api/projects/${id}`, "PATCH", { darkcard: dcCfg });
@@ -401,7 +437,7 @@ export default function ProjectWizard({ initial }) {
       const data = await jsonFetch(`/api/projects/${id}`, "PATCH", {
         captionStyle: slCfg.captionStyle,
         scriptTemplate: slCfg.scriptTemplate,
-        poll: { question: slCfg.poll.question, options: slCfg.poll.options.map((o) => String(o || "").trim()) },
+        poll: { question: slCfg.poll.question, options: slCfg.poll.options.map((o) => String(o || "").trim()), voText: slCfg.poll.voText },
       });
       setProject(data.project);
     });
@@ -768,7 +804,55 @@ export default function ProjectWizard({ initial }) {
                   <input key={k} value={slCfg.poll.options[k] || ""} onChange={(e) => { const options = [...slCfg.poll.options]; options[k] = e.target.value; setSlCfg({ ...slCfg, poll: { ...slCfg.poll, options } }); }} placeholder={`Pilihan ${k + 1} (maks 3 kata)`} className={inputCls} />
                 ))}
               </div>
-              <p className="mt-1 text-xs text-white/40">Kartu 6 detik di akhir video: pertanyaan + pil "+ FOLLOW" + pilihan + ajakan komentar. Naskah baru selalu menyarankan isinya.</p>
+              <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-2">
+                <label className={labelCls}>Voice over kartu polling (opsional)</label>
+                <input value={slCfg.poll.voText} onChange={(e) => setSlCfg({ ...slCfg, poll: { ...slCfg.poll, voText: e.target.value } })} placeholder="mis. Gimana menurut kamu? Tulis jawabanmu di komentar ya!" className={inputCls} />
+                <div className="mt-2 flex flex-wrap items-center gap-1">
+                  {project.poll?.vo?.status === "ready" ? (
+                    <>
+                      <audio controls src={assetUrl(project.poll.vo)} className="h-9 max-w-full" />
+                      <span className="text-xs text-white/50">{project.poll.vo.duration ? `${project.poll.vo.duration.toFixed(1)} dtk` : ""}</span>
+                    </>
+                  ) : project.poll?.vo?.status === "generating" ? (
+                    <span className="text-xs text-sky-300">sedang dibuat…{assetStale(project.poll.vo) ? " (tampaknya terhenti — klik Generate VO untuk mencoba lagi)" : ""}</span>
+                  ) : project.poll?.vo?.status === "error" ? (
+                    <span className="text-xs text-red-300">gagal: {project.poll.vo.error || "coba lagi"}</span>
+                  ) : (
+                    <span className="text-xs text-white/40">belum ada VO — kartu tampil hening</span>
+                  )}
+                  <span className="ml-auto flex flex-wrap gap-1">
+                    <select value={voProv.poll || exec.voProvider || "edge-tts"} onChange={(e) => { const p = e.target.value; setVoProv({ ...voProv, poll: p }); setVoVoice({ ...voVoice, poll: defaultVoiceFor(p) }); }} className={inputCls} style={{ width: 160 }} title="Mesin VO kartu polling">
+                      <option value="edge-tts">edge-tts</option>
+                      <option value="gemini-tts">Gemini TTS</option>
+                      <option value="muse-bridge">Muse (bridge)</option>
+                      <option value="elevenlabs">ElevenLabs</option>
+                    </select>
+                    <select value={voVoice.poll || exec.voice} onChange={(e) => setVoVoice({ ...voVoice, poll: e.target.value })} className={inputCls} style={{ width: 180 }} title="Suara VO kartu polling">
+                      {(() => {
+                        const prov = voProv.poll || exec.voProvider || "edge-tts";
+                        const list = voiceListFor(prov);
+                        const cur = voVoice.poll || exec.voice;
+                        const opts = list.map((v) => <option key={v.id} value={v.id}>{v.label}</option>);
+                        if (cur && !list.some((v) => v.id === cur)) opts.unshift(<option key="cur" value={cur}>{cur}</option>);
+                        return opts;
+                      })()}
+                    </select>
+                    <button onClick={genPollVo} disabled={busy === "pollVo" || !slCfg.poll.voText.trim() || (project.poll?.vo?.status === "generating" && !assetStale(project.poll.vo))} className={btnCls} title={!slCfg.poll.voText.trim() ? "Isi teks VO dulu, lalu klik Simpan di bawah" : ""}>
+                      {busy === "pollVo" ? "Membuat..." : project.poll?.vo?.status === "generating" && !assetStale(project.poll.vo) ? "Sedang dibuat…" : project.poll?.vo?.status === "ready" ? "Generate ulang" : "Generate VO"}
+                    </button>
+                    <VoRecorder onDone={(f) => uploadPollVo(f)} disabled={busy === "pollVo"} />
+                    <label className={btnCls + " cursor-pointer"}>
+                      Unggah
+                      <input type="file" accept="audio/*" className="hidden" onChange={(e) => uploadPollVo(e.target.files?.[0])} />
+                    </label>
+                    {project.poll?.vo?.status === "ready" && (
+                      <button onClick={deletePollVo} disabled={busy === "pollVo"} className={btnCls}>Hapus VO</button>
+                    )}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-white/40">Generate otomatis menyimpan teks ini dulu. Kartu mengikuti durasi VO (minimum 6 detik). Mode otomatis juga membuat VO ini bila teks terisi.</p>
+              </div>
+              <p className="mt-1 text-xs text-white/40">Kartu di akhir video: pertanyaan + pil "+ FOLLOW" + pilihan + ajakan komentar. Naskah baru selalu menyarankan isinya.</p>
             </div>
             <button onClick={saveSl} disabled={busy === "saveSl"} className={`${btnCls} mt-3`}>Simpan caption, template & polling</button>
           </div>
