@@ -13,9 +13,9 @@ export const dynamic = "force-dynamic";
 // Isi scene.image dengan gambar hasil generate, sesuai mesin & penyedia
 // gambar proyek. Melempar Error bila gagal; penulisan status akhir ke
 // project.json diatur pemanggil.
-async function produceImage(project, scene) {
+async function produceImage(project, scene, providerOverride) {
   if (!scene.imagePrompt?.trim()) throw new Error("Prompt gambar scene ini masih kosong.");
-  const provider = project.executors.imageProvider || "pollinations";
+  const provider = providerOverride || project.executors.imageProvider || "pollinations";
   if (provider === "upload") {
     throw new Error("Penyedia gambar proyek ini 'unggah manual' — unggah berkas gambar untuk scene ini.");
   }
@@ -108,9 +108,12 @@ export async function POST(req, { params }) {
     // selesai, sehingga koneksi HTTP yang putus di tengah membuat UI
     // menampilkan "Failed to fetch" padahal gambar tetap dibuat server.
     // Kini klien memantau status scene.image: generating → ready/error.
+    const body = await req.json().catch(() => ({}));
+    const IMG_PROVIDERS = ["pollinations", "sdxl-9router", "workers-ai", "muse-bridge", "venice", "upload"];
+    const providerOverride = IMG_PROVIDERS.includes(body.provider) ? body.provider : null;
     if (!scene.imagePrompt?.trim()) throw new Error("Prompt gambar scene ini masih kosong.");
-    if ((project.executors.imageProvider || "pollinations") === "upload") {
-      throw new Error("Penyedia gambar proyek ini 'unggah manual' — unggah berkas gambar untuk scene ini.");
+    if ((providerOverride || project.executors.imageProvider || "pollinations") === "upload") {
+      throw new Error("Penyedia gambar scene ini 'unggah manual' — unggah berkas gambar untuk scene ini.");
     }
     const key = sceneJobKey(project.id, scene.id, "image");
     const runningAt = activeSceneJobs.get(key);
@@ -125,7 +128,7 @@ export async function POST(req, { params }) {
         const p = loadProject(project.id);
         const s = p?.scenes.find((x) => x.id === scene.id);
         if (!p || !s) return;
-        await produceImage(p, s);
+        await produceImage(p, s, providerOverride);
         const pf = loadProject(project.id);
         const sf = pf?.scenes.find((x) => x.id === scene.id);
         // Tulis hasil hanya bila status masih "generating": unggahan

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { loadProject, saveProject } from "../../../../../lib/store.js";
+import { loadProject, saveProject, resolveSceneVisual } from "../../../../../lib/store.js";
 import { renderProject } from "../../../../../lib/render.js";
 import { renderStickman, ensureStickmanProps } from "../../../../../lib/stickman.js";
 import { renderDarkcard } from "../../../../../lib/darkcard.js";
@@ -27,15 +27,23 @@ export async function POST(req, { params }) {
     }
   }
   if (project.engine !== "stickman" && project.engine !== "darkcard" && project.engine !== "diagram") {
-    const flowMode = project.engine === "slides" && project.visualSource === "flow";
-    const missing = flowMode
-      ? project.scenes.findIndex((s) => s.video?.status !== "ready")
-      : project.scenes.findIndex((s) => s.image?.status !== "ready");
-    if (missing >= 0) {
-      return NextResponse.json(
-        { error: flowMode ? `Scene ${missing + 1} belum punya video Flow.` : `Scene ${missing + 1} belum punya gambar latar.` },
-        { status: 400 }
-      );
+    if (project.engine === "slides") {
+      // Visual per scene bisa gambar atau klip Flow (campuran didukung).
+      const missing = project.scenes.findIndex((s) => resolveSceneVisual(s) === null);
+      if (missing >= 0) {
+        return NextResponse.json(
+          { error: `Scene ${missing + 1} belum punya gambar latar atau video Flow.` },
+          { status: 400 }
+        );
+      }
+    } else {
+      const missing = project.scenes.findIndex((s) => s.image?.status !== "ready");
+      if (missing >= 0) {
+        return NextResponse.json(
+          { error: `Scene ${missing + 1} belum punya gambar latar.` },
+          { status: 400 }
+        );
+      }
     }
   }
   if (activeJobs.has(project.id)) {

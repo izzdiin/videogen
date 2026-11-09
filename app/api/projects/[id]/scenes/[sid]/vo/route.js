@@ -15,26 +15,28 @@ async function produceVo(project, scene, body) {
   if (!scene.narration?.trim()) throw new Error("Teks narasi scene ini masih kosong.");
   const rel = `vo/${scene.id}.mp3`;
   const abs = path.join(projectDir(project.id), rel);
-  if ((project.executors.voProvider || "edge-tts") === "muse-bridge") {
+  // Pilihan per scene (dari wizard) menimpa eksekutor proyek bila valid.
+  const VO_PROVIDERS = ["edge-tts", "gemini-tts", "muse-bridge", "elevenlabs"];
+  const provider = VO_PROVIDERS.includes(body.provider) ? body.provider : project.executors.voProvider || "edge-tts";
+  if (provider === "muse-bridge") {
     const wanted = body.voice || project.executors.voice;
     const voice = isClaudeVoice(wanted) ? wanted : defaultClaudeVoice();
     const { duration } = await synthesizeClaude(scene.narration, voice, abs, project.audience === "en" ? "en" : "id");
-    scene.vo = { status: "ready", file: rel, duration, source: "muse-bridge", updatedAt: new Date().toISOString() };
-  } else if ((project.executors.voProvider || "edge-tts") === "gemini-tts") {
-    const voice = isGeminiVoice(project.executors.voice) ? project.executors.voice : defaultGeminiVoice();
+    scene.vo = { status: "ready", file: rel, duration, source: "muse-bridge", voice, updatedAt: new Date().toISOString() };
+  } else if (provider === "gemini-tts") {
+    const wanted = body.voice || project.executors.voice;
+    const voice = isGeminiVoice(wanted) ? wanted : defaultGeminiVoice();
     const { duration } = await synthesizeGemini(scene.narration, voice, abs);
-    scene.vo = { status: "ready", file: rel, duration, source: "gemini-tts", updatedAt: new Date().toISOString() };
-  } else if ((project.executors.voProvider || "edge-tts") === "elevenlabs") {
-    const voice = isElevenLabsVoice(project.executors.voice) ? project.executors.voice : defaultElevenLabsVoice();
+    scene.vo = { status: "ready", file: rel, duration, source: "gemini-tts", voice, updatedAt: new Date().toISOString() };
+  } else if (provider === "elevenlabs") {
+    const wanted = body.voice || project.executors.voice;
+    const voice = isElevenLabsVoice(wanted) ? wanted : wanted && String(wanted).length >= 20 ? wanted : defaultElevenLabsVoice();
     const { duration } = await synthesizeElevenLabs(scene.narration, voice, abs);
-    scene.vo = { status: "ready", file: rel, duration, source: "elevenlabs", updatedAt: new Date().toISOString() };
+    scene.vo = { status: "ready", file: rel, duration, source: "elevenlabs", voice, updatedAt: new Date().toISOString() };
   } else {
-    const { duration } = await synthesize(
-      scene.narration,
-      body.voice || project.executors.voice,
-      abs
-    );
-    scene.vo = { status: "ready", file: rel, duration, source: "edge-tts", updatedAt: new Date().toISOString() };
+    const voice = body.voice || project.executors.voice;
+    const { duration } = await synthesize(scene.narration, voice, abs);
+    scene.vo = { status: "ready", file: rel, duration, source: "edge-tts", voice, updatedAt: new Date().toISOString() };
   }
 }
 
