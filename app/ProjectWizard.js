@@ -241,7 +241,7 @@ export default function ProjectWizard({ initial }) {
   }
 
   const anyGenerating =
-    scenes.some((s) => s.image?.status === "generating" || s.vo?.status === "generating" || s.layer?.status === "generating") ||
+    scenes.some((s) => s.image?.status === "generating" || s.vo?.status === "generating" || s.layer?.status === "generating" || s.words?.status === "generating") ||
     project.poll?.vo?.status === "generating" ||
     (project.characters || []).some((c) => c.referenceImage?.status === "generating");
 
@@ -263,7 +263,7 @@ export default function ProjectWizard({ initial }) {
     setScenes((prev) =>
       prev.map((s) => {
         const fresh = respProject.scenes.find((x) => x.id === s.id);
-        return fresh ? { ...s, image: fresh.image, vo: fresh.vo, video: fresh.video, sfx: fresh.sfx } : s;
+        return fresh ? { ...s, image: fresh.image, vo: fresh.vo, video: fresh.video, sfx: fresh.sfx, words: fresh.words } : s;
       })
     );
   }
@@ -496,6 +496,13 @@ export default function ProjectWizard({ initial }) {
       setProject(data.project);
       const fresh = (data.project.scenes || []).find((x) => x.id === s.id);
       if (fresh) setScenes((prev) => prev.map((x) => (x.id === s.id ? { ...x, layerMotion: fresh.layerMotion } : x)));
+    });
+
+  // --- Timestamp kata ASR (Fase D) ---
+  const genWords = (s) =>
+    call("words-" + s.id, async () => {
+      const data = await jsonFetch(`/api/projects/${id}/scenes/${s.id}/words`, "POST", {});
+      setProject(data.project);
     });
 
   // --- Editor keyframe motion (Fase B) ---
@@ -1791,6 +1798,23 @@ export default function ProjectWizard({ initial }) {
                     <input type="number" min={0} max={100} step={1} value={s.bgmVolume === null || s.bgmVolume === undefined ? "" : Math.round(s.bgmVolume * 100)} placeholder="proyek" onChange={(e) => updSceneAudio(s.id, { bgmVolume: e.target.value === "" ? null : Number(e.target.value) / 100 })} className={inputCls} style={{ width: 64 }} />
                   </label>
                   <span className="text-white/30">SFX berbunyi dari awal scene; perubahan volume tersimpan otomatis.</span>
+                </div>
+              )}
+              {project.engine === "slides" && ["karaoke", "dynamic", "satukata"].includes(project.captionStyle || "frasa") && (
+                <div className="flex basis-full flex-wrap items-center gap-2 border-t border-white/5 pt-2 text-xs text-white/50">
+                  <span className="font-semibold uppercase tracking-wide">Timestamp kata</span>
+                  {s.words?.status === "ready" ? (
+                    <span className="text-emerald-300">ASR Gemini — karaoke mengikuti suara asli ({s.words.items?.length || 0} kata)</span>
+                  ) : s.words?.status === "generating" ? (
+                    <span className="text-sky-300">sedang ditranskripsikan… (bisa 2–4 menit)</span>
+                  ) : s.words?.status === "error" ? (
+                    <span className="text-red-300">ASR gagal — render memakai perkiraan ({String(s.words.error || "").slice(0, 80)})</span>
+                  ) : (
+                    <span>perkiraan dari panjang kata — render tetap jalan</span>
+                  )}
+                  <button onClick={() => genWords(s)} disabled={busy === "words-" + s.id || s.vo?.status !== "ready" || s.words?.status === "generating"} className={btnCls}>
+                    {busy === "words-" + s.id ? "Meminta..." : s.words?.status === "ready" ? "Transkrip ulang" : "Transkrip ASR"}
+                  </button>
                 </div>
               )}
             </div>
