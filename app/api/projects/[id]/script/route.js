@@ -32,6 +32,8 @@ export async function POST(req, { params }) {
       return next;
     });
     project.scenes = mapped;
+    // Provenans naskah mentah generator → script.json (layout v2).
+    project.script = { generatedAt: new Date().toISOString(), model, source: "manual", scenes };
     saveProject(project);
     return NextResponse.json({ project });
   } catch (e) {

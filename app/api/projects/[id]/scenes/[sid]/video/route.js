@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { loadProject, saveProject, projectDir } from "../../../../../../../lib/store.js";
+import { loadProject, saveProject, projectDir, sweepAssetDir } from "../../../../../../../lib/store.js";
 import { probeDuration, probeHasAudio } from "../../../../../../../lib/tts.js";
 
 export const dynamic = "force-dynamic";
@@ -31,12 +31,11 @@ export async function POST(req, { params }) {
     if (!file || typeof file === "string") throw new Error("File tidak ada.");
     const ext = (file.name.split(".").pop() || "mp4").toLowerCase().replace(/[^a-z0-9]/g, "");
     if (!OK_EXT.includes(ext)) throw new Error("Format video harus mp4, webm, mov, atau mkv.");
-    const dir = path.join(projectDir(project.id), "clips");
+    const dir = path.join(projectDir(project.id), "assets", "videos");
     fs.mkdirSync(dir, { recursive: true });
-    for (const f of fs.readdirSync(dir)) {
-      if (f.startsWith(scene.id + ".")) fs.rmSync(path.join(dir, f), { force: true });
-    }
-    const rel = `clips/${scene.id}.${ext}`;
+    sweepAssetDir(project.id, "assets/videos", scene.id + ".");
+    sweepAssetDir(project.id, "clips", scene.id + ".");
+    const rel = `assets/videos/${scene.id}.${ext}`;
     const abs = path.join(projectDir(project.id), rel);
     fs.writeFileSync(abs, Buffer.from(await file.arrayBuffer()));
     const duration = await probeDuration(abs);

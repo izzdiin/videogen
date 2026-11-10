@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { loadProject, saveProject, projectDir } from "../../../../../../lib/store.js";
+import { loadProject, saveProject, projectDir, POLL_VO_REL, sweepAssetDir } from "../../../../../../lib/store.js";
 import { synthesize, synthesizeGemini, synthesizeClaude, synthesizeElevenLabs, probeDuration } from "../../../../../../lib/tts.js";
 import { isGeminiVoice, defaultGeminiVoice, isClaudeVoice, defaultClaudeVoice, isElevenLabsVoice, defaultElevenLabsVoice } from "../../../../../../lib/voices.js";
 import { activeSceneJobs, sceneJobKey, SCENE_JOB_STALE_MS } from "../../../../../../lib/jobs.js";
@@ -16,8 +16,9 @@ export const dynamic = "force-dynamic";
 async function producePollVo(project, body) {
   const text = project.poll?.voText?.trim();
   if (!text) throw new Error("Teks VO polling masih kosong.");
-  const rel = `vo/poll.mp3`;
+  const rel = POLL_VO_REL;
   const abs = path.join(projectDir(project.id), rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
   const VO_PROVIDERS = ["edge-tts", "gemini-tts", "muse-bridge", "elevenlabs"];
   const provider = VO_PROVIDERS.includes(body.provider) ? body.provider : project.executors.voProvider || "edge-tts";
   if (provider === "muse-bridge") {
@@ -43,11 +44,9 @@ async function producePollVo(project, body) {
 }
 
 function clearOldVoFiles(project) {
-  const dir = path.join(projectDir(project.id), "vo");
-  fs.mkdirSync(dir, { recursive: true });
-  for (const f of fs.readdirSync(dir)) {
-    if (f.startsWith("poll.")) fs.rmSync(path.join(dir, f), { force: true });
-  }
+  fs.mkdirSync(path.join(projectDir(project.id), "assets", "audio"), { recursive: true });
+  sweepAssetDir(project.id, "assets/audio", "poll.");
+  sweepAssetDir(project.id, "vo", "poll.");
 }
 
 export async function POST(req, { params }) {
@@ -63,7 +62,7 @@ export async function POST(req, { params }) {
       if (!file || typeof file === "string") throw new Error("File tidak ada.");
       const ext = (file.name.split(".").pop() || "mp3").toLowerCase().replace(/[^a-z0-9]/g, "") || "mp3";
       clearOldVoFiles(project);
-      const rel = `vo/poll.${ext}`;
+      const rel = `assets/audio/poll.${ext}`;
       const abs = path.join(projectDir(project.id), rel);
       fs.writeFileSync(abs, Buffer.from(await file.arrayBuffer()));
       const duration = await probeDuration(abs);

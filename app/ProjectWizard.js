@@ -1555,7 +1555,7 @@ export default function ProjectWizard({ initial }) {
         {exec.assembly === "export" && project.engine === "slides" ? (
           <div className="text-sm text-white/70">
             Mode rakit manual dipilih. Unduh paket proyek di tahap 6 — berisi still, VO, naskah,
-            dan perintah ffmpeg (renders/commands.txt dibuat setelah render pertama; untuk paket awal,
+            dan perintah ffmpeg (exports/commands.txt dibuat setelah render pertama; untuk paket awal,
             rakit dengan ffmpeg concat mengikuti urutan scene di project.json).
             <div className="mt-3">
               <a href={`/api/projects/${id}/package`} className={btnAmber + " inline-block"}>Unduh paket proyek</a>

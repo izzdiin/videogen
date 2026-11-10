@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { loadProject, saveProject, projectDir } from "../../../../../lib/store.js";
+import { loadProject, saveProject, projectDir, sweepAssetDir } from "../../../../../lib/store.js";
 import { audioFromPreset } from "../../../../../lib/audioPresets.js";
 
 export const dynamic = "force-dynamic";
@@ -22,12 +22,11 @@ export async function POST(req, { params }) {
     if (!AUDIO_EXTS.includes(ext)) {
       throw new Error("Format musik harus salah satu dari: " + AUDIO_EXTS.join(", ") + ".");
     }
-    const dir = path.join(projectDir(project.id), "audio");
+    const dir = path.join(projectDir(project.id), "assets", "music");
     fs.mkdirSync(dir, { recursive: true });
-    for (const f of fs.readdirSync(dir)) {
-      if (f.startsWith("bgm.")) fs.rmSync(path.join(dir, f), { force: true });
-    }
-    const rel = `audio/bgm.${ext}`;
+    sweepAssetDir(project.id, "assets/music", "bgm.");
+    sweepAssetDir(project.id, "audio", "bgm.");
+    const rel = `assets/music/bgm.${ext}`;
     fs.writeFileSync(path.join(projectDir(project.id), rel), Buffer.from(await file.arrayBuffer()));
     if (!project.audio) project.audio = audioFromPreset("edukatif");
     project.audio.bgm = {
@@ -46,12 +45,8 @@ export async function POST(req, { params }) {
 export async function DELETE(req, { params }) {
   const project = loadProject(params.id);
   if (!project) return NextResponse.json({ error: "Proyek tidak ditemukan." }, { status: 404 });
-  const dir = path.join(projectDir(project.id), "audio");
-  if (fs.existsSync(dir)) {
-    for (const f of fs.readdirSync(dir)) {
-      if (f.startsWith("bgm.")) fs.rmSync(path.join(dir, f), { force: true });
-    }
-  }
+  sweepAssetDir(project.id, "assets/music", "bgm.");
+  sweepAssetDir(project.id, "audio", "bgm.");
   if (project.audio) project.audio.bgm = { status: "none" };
   saveProject(project);
   return NextResponse.json({ project });

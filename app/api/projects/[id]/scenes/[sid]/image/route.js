@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { loadProject, saveProject, projectDir } from "../../../../../../../lib/store.js";
+import { loadProject, saveProject, projectDir, imageRel, sweepAssetDir } from "../../../../../../../lib/store.js";
 import { generateImage, generateImageWorkersAI, generateImageVia9Router, generateImageViaBridge, generateImageViaVenice } from "../../../../../../../lib/ai.js";
 import { b2ArtPrompt, b3ArtPrompt } from "../../../../../../../lib/stickman.js";
 import { slidesImagePrompt } from "../../../../../../../lib/visualStyles.js";
@@ -19,7 +19,7 @@ async function produceImage(project, scene, providerOverride) {
   if (provider === "upload") {
     throw new Error("Penyedia gambar proyek ini 'unggah manual' — unggah berkas gambar untuk scene ini.");
   }
-  const rel = `stills/${scene.id}.jpg`;
+  const rel = imageRel(scene.id);
   if (project.engine === "editorial") {
     if (provider === "pollinations") {
       const seed = Math.floor(Math.random() * 1_000_000);
@@ -79,12 +79,11 @@ export async function POST(req, { params }) {
   const scene = project.scenes.find((s) => s.id === params.sid);
   if (!scene) return NextResponse.json({ error: "Scene tidak ditemukan." }, { status: 404 });
 
-  const dir = path.join(projectDir(project.id), "stills");
+  const dir = path.join(projectDir(project.id), "assets", "images");
   fs.mkdirSync(dir, { recursive: true });
   const clearOld = () => {
-    for (const f of fs.readdirSync(dir)) {
-      if (f.startsWith(scene.id + ".")) fs.rmSync(path.join(dir, f), { force: true });
-    }
+    sweepAssetDir(project.id, "assets/images", scene.id + ".");
+    sweepAssetDir(project.id, "stills", scene.id + ".");
   };
 
   const ct = req.headers.get("content-type") || "";
@@ -95,7 +94,7 @@ export async function POST(req, { params }) {
       if (!file || typeof file === "string") throw new Error("File tidak ada.");
       const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
       clearOld();
-      const rel = `stills/${scene.id}.${ext}`;
+      const rel = `assets/images/${scene.id}.${ext}`;
       fs.writeFileSync(path.join(projectDir(project.id), rel), Buffer.from(await file.arrayBuffer()));
       scene.image = { status: "ready", file: rel, source: "upload", updatedAt: new Date().toISOString() };
       saveProject(project);

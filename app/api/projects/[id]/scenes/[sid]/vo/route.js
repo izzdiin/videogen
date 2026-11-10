@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
-import { loadProject, saveProject, projectDir } from "../../../../../../../lib/store.js";
+import { loadProject, saveProject, projectDir, sceneVoRel, sweepAssetDir } from "../../../../../../../lib/store.js";
 import { synthesize, synthesizeGemini, synthesizeClaude, synthesizeElevenLabs, probeDuration } from "../../../../../../../lib/tts.js";
 import { isGeminiVoice, defaultGeminiVoice, isClaudeVoice, defaultClaudeVoice, isElevenLabsVoice, defaultElevenLabsVoice } from "../../../../../../../lib/voices.js";
 import { activeSceneJobs, sceneJobKey, SCENE_JOB_STALE_MS } from "../../../../../../../lib/jobs.js";
@@ -13,8 +13,9 @@ export const dynamic = "force-dynamic";
 // diatur pemanggil.
 async function produceVo(project, scene, body) {
   if (!scene.narration?.trim()) throw new Error("Teks narasi scene ini masih kosong.");
-  const rel = `vo/${scene.id}.mp3`;
+  const rel = sceneVoRel(scene.id);
   const abs = path.join(projectDir(project.id), rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
   // Pilihan per scene (dari wizard) menimpa eksekutor proyek bila valid.
   const VO_PROVIDERS = ["edge-tts", "gemini-tts", "muse-bridge", "elevenlabs"];
   const provider = VO_PROVIDERS.includes(body.provider) ? body.provider : project.executors.voProvider || "edge-tts";
@@ -46,12 +47,11 @@ export async function POST(req, { params }) {
   const scene = project.scenes.find((s) => s.id === params.sid);
   if (!scene) return NextResponse.json({ error: "Scene tidak ditemukan." }, { status: 404 });
 
-  const dir = path.join(projectDir(project.id), "vo");
+  const dir = path.join(projectDir(project.id), "assets", "audio");
   fs.mkdirSync(dir, { recursive: true });
   const clearOld = () => {
-    for (const f of fs.readdirSync(dir)) {
-      if (f.startsWith(scene.id + ".")) fs.rmSync(path.join(dir, f), { force: true });
-    }
+    sweepAssetDir(project.id, "assets/audio", "vo-" + scene.id + ".");
+    sweepAssetDir(project.id, "vo", scene.id + ".");
   };
 
   const ct = req.headers.get("content-type") || "";
@@ -62,7 +62,7 @@ export async function POST(req, { params }) {
       if (!file || typeof file === "string") throw new Error("File tidak ada.");
       const ext = (file.name.split(".").pop() || "mp3").toLowerCase().replace(/[^a-z0-9]/g, "") || "mp3";
       clearOld();
-      const rel = `vo/${scene.id}.${ext}`;
+      const rel = `assets/audio/vo-${scene.id}.${ext}`;
       const abs = path.join(projectDir(project.id), rel);
       fs.writeFileSync(abs, Buffer.from(await file.arrayBuffer()));
       const duration = await probeDuration(abs);
