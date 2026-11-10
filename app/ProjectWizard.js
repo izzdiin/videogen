@@ -490,6 +490,37 @@ export default function ProjectWizard({ initial }) {
       setSheet(data);
     });
 
+  // --- Reference Manager (CC1): portrait / fullbody / expressions ---
+  const genRef = (c, kind) => {
+    if (!c?.id || c.id.startsWith("tmp-")) return;
+    call(`ref-${kind}-` + c.id, async () => {
+      const data = await jsonFetch(`/api/projects/${id}/characters/${c.id}/references`, "POST", { kind });
+      setProject(data.project);
+      setChars(data.project.characters || []);
+    });
+  };
+  const uploadRef = (c, kind, file) => {
+    if (!file || !c?.id || c.id.startsWith("tmp-")) return;
+    call(`ref-${kind}-` + c.id, async () => {
+      const form = new FormData();
+      form.append("kind", kind);
+      form.append("file", file);
+      const res = await fetch(`/api/projects/${id}/characters/${c.id}/references`, { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setProject(data.project);
+      setChars(data.project.characters || []);
+    });
+  };
+  const deleteRef = (c, kind) => {
+    if (!c?.id || c.id.startsWith("tmp-")) return;
+    call(`ref-${kind}-` + c.id, async () => {
+      const data = await jsonFetch(`/api/projects/${id}/characters/${c.id}/references`, "DELETE", { kind });
+      setProject(data.project);
+      setChars(data.project.characters || []);
+    });
+  };
+
   // --- Paket sosmed: thumbnail + caption + tagar (tahap 6) ---
   const socialCopy = [social.caption?.trim(), (social.tags || []).map((t) => `#${t}`).join(" ")].filter(Boolean).join("\n\n");
   const saveSocial = () =>
@@ -1156,6 +1187,41 @@ export default function ProjectWizard({ initial }) {
                             </div>
                           </div>
                           {c.identityLocked && <p className="mt-1 text-[11px] text-amber-300/80">Identity terkunci: perubahan field identity tidak akan disimpan server sampai kunci dibuka.</p>}
+                        </div>
+                        <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+                          <div className="mb-1 flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-bold text-sky-200">Reference Manager</span>
+                            <span className="text-[11px] text-white/40">seed karakter: {saved?.seed ?? c.seed ?? "—"}</span>
+                          </div>
+                          <p className="mb-2 text-[11px] text-white/35">Tiga referensi per karakter. Full body & expression sheet diturunkan dari portrait (generate portrait dulu). Di CC1 penurunannya memakai prompt teks yang diperkuat; conditioning visual menyusul di CC2.</p>
+                          <div className="grid gap-2 md:grid-cols-3">
+                            {[["portrait", "Portrait"], ["fullbody", "Full body"], ["expressions", "Expressions"]].map(([kind, label]) => {
+                              const r = (saved?.references || c.references || {})[kind] || (kind === "portrait" ? ref : { status: "none" });
+                              const rk = `ref-${kind}-` + c.id;
+                              return (
+                                <div key={kind} className="flex flex-col items-center gap-1">
+                                  {r.status === "ready" ? (
+                                    <img src={assetUrl(r)} alt={label} className="h-24 w-full rounded object-cover" />
+                                  ) : (
+                                    <div className="flex h-24 w-full items-center justify-center rounded bg-white/5 px-1 text-center text-[11px] text-white/40">
+                                      {r.status === "generating" ? "sedang dibuat…" : r.status === "error" ? "gagal dibuat" : `belum ada ${label.toLowerCase()}`}
+                                    </div>
+                                  )}
+                                  <span className="text-[11px] font-medium text-white/60">{label}{r.derivedFrom ? " · dari portrait" : ""}</span>
+                                  <span className="flex flex-wrap justify-center gap-1">
+                                    <button onClick={() => genRef(c, kind)} disabled={isTmp || busy === rk || r.status === "generating"} className={btnCls}>{r.status === "ready" ? "Generate ulang" : "Generate"}</button>
+                                    <label className={btnCls + (isTmp ? " pointer-events-none opacity-40" : " cursor-pointer")}>
+                                      Unggah
+                                      <input type="file" accept="image/*" className="hidden" onChange={(e) => uploadRef(c, kind, e.target.files?.[0])} />
+                                    </label>
+                                    {r.status === "ready" && (
+                                      <button onClick={() => deleteRef(c, kind)} disabled={busy === rk} className={btnCls}>Hapus</button>
+                                    )}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                         <button onClick={() => removeChar(ci)} className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/25">Hapus karakter</button>
                       </div>

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { loadProject, saveProject, deleteProject, mergeScenes, sanitizeCharacters, sanitizeSeries } from "../../../../lib/store.js";
+import { loadProject, saveProject, deleteProject, mergeScenes, sanitizeCharacters, sanitizeSeries, sweepAssetDir } from "../../../../lib/store.js";
 import { VISUAL_STYLE_IDS } from "../../../../lib/visualStyles.js";
 import { sanitizeAudioConfig } from "../../../../lib/audioPresets.js";
 import { sanitizeSocial } from "../../../../lib/social.js";
@@ -81,8 +81,17 @@ export async function PATCH(req, { params }) {
   if (Array.isArray(body.characters)) {
     // Character sheet (Fase A): referenceImage dipertahankan dari server;
     // rujukan karakter yang terhapus dibersihkan dari storyboard scene.
+    // CC1: berkas referensi karakter yang dihapus ikut dibersihkan
+    // (portrait lama "<cid>." + himpunan baru "<cid>-<kind>.").
+    const beforeIds = new Set((project.characters || []).map((c) => c.id));
     project.characters = sanitizeCharacters(body.characters, project.characters || []);
     const valid = new Set(project.characters.map((c) => c.id));
+    for (const oldId of beforeIds) {
+      if (!valid.has(oldId)) {
+        sweepAssetDir(project.id, "assets/characters", oldId + ".");
+        sweepAssetDir(project.id, "assets/characters", oldId + "-");
+      }
+    }
     for (const s of project.scenes || []) {
       if (s.sb && Array.isArray(s.sb.characters)) {
         s.sb.characters = s.sb.characters.filter((x) => valid.has(x));
