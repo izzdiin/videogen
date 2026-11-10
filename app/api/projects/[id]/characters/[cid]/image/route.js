@@ -6,6 +6,7 @@ import { generateWithAdapter } from "../../../../../../../lib/imageAdapter.js";
 import { slidesImagePrompt } from "../../../../../../../lib/visualStyles.js";
 import { effectiveAppearance } from "../../../../../../../lib/characterIdentity.js";
 import { activeSceneJobs, sceneJobKey, SCENE_JOB_STALE_MS } from "../../../../../../../lib/jobs.js";
+import { syncLegacyWrite, liftLegacyFromRefs } from "../../../../../../../lib/charImageSync.js";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +62,9 @@ export async function POST(req, { params }) {
       const abs = path.join(projectDir(project.id), rel);
       fs.mkdirSync(path.dirname(abs), { recursive: true });
       fs.writeFileSync(abs, Buffer.from(await file.arrayBuffer()));
+      liftLegacyFromRefs(character);
       character.referenceImage = { status: "ready", file: rel, source: "upload", updatedAt: new Date().toISOString() };
+      syncLegacyWrite(character);
       saveProject(project);
       return NextResponse.json({ project });
     }
@@ -72,7 +75,9 @@ export async function POST(req, { params }) {
     if (runningAt && Date.now() - new Date(runningAt).getTime() < SCENE_JOB_STALE_MS) {
       return NextResponse.json({ project, started: false, generating: true });
     }
+    liftLegacyFromRefs(character);
     character.referenceImage = { status: "generating", startedAt: new Date().toISOString() };
+    syncLegacyWrite(character);
     saveProject(project);
     activeSceneJobs.set(key, new Date().toISOString());
     (async () => {
@@ -83,16 +88,20 @@ export async function POST(req, { params }) {
         const made = await produceCharacterImage(p, c, body.provider);
         const pf = loadProject(project.id);
         const cf = pf && findCharacter(pf, character.id);
+        if (cf) liftLegacyFromRefs(cf);
         if (cf && cf.referenceImage?.status === "generating") {
           cf.referenceImage = { status: "ready", ...made, updatedAt: new Date().toISOString() };
+          syncLegacyWrite(cf);
           saveProject(pf);
         }
       } catch (e) {
         try {
           const pf = loadProject(project.id);
           const cf = pf && findCharacter(pf, character.id);
+          if (cf) liftLegacyFromRefs(cf);
           if (cf && cf.referenceImage?.status === "generating") {
             cf.referenceImage = { status: "error", error: String(e.message || e), updatedAt: new Date().toISOString() };
+            syncLegacyWrite(cf);
             saveProject(pf);
           }
         } catch {}
@@ -112,7 +121,9 @@ export async function DELETE(req, { params }) {
   const character = findCharacter(project, params.cid);
   if (!character) return NextResponse.json({ error: "Karakter tidak ditemukan." }, { status: 404 });
   sweepAssetDir(project.id, "assets/characters", character.id + ".");
+  liftLegacyFromRefs(character);
   character.referenceImage = { status: "none" };
+  syncLegacyWrite(character);
   saveProject(project);
   return NextResponse.json({ project });
 }
