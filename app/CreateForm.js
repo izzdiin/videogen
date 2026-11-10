@@ -192,6 +192,7 @@ export default function CreateForm() {
                 ["Voice", plan.voiceLabel],
                 ["Subtitle", plan.gayaSubtitleLabel],
                 ["Musik", plan.musik],
+                ["Peran beat", Array.isArray(plan.peranBeat) && plan.peranBeat.length ? plan.peranBeat.join(" → ") : "—"],
                 ["Penyedia gambar", plan.penyediaGambarLabel],
               ].map(([k, v]) => (
                 <div key={k} className="flex gap-2">

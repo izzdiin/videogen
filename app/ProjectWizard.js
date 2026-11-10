@@ -24,6 +24,7 @@ const SB_SHOT_OPTS = [["wide", "Wide (establishing)"], ["medium", "Medium"], ["c
 const SB_CAMERA_OPTS = [["static", "Diam"], ["zoom-in", "Zoom in"], ["zoom-out", "Zoom out"], ["pan-left", "Pan kiri"], ["pan-right", "Pan kanan"], ["tilt-up", "Tilt atas"], ["tilt-down", "Tilt bawah"]];
 const SB_TIME_OPTS = [["", "—"], ["pagi", "Pagi"], ["siang", "Siang"], ["sore", "Sore"], ["malam", "Malam"]];
 const SB_TRANSITION_OPTS = [["cut", "Cut"], ["fade", "Fade"], ["slide", "Slide"]];
+const SB_ROLE_OPTS = [["", "— (otomatis)"], ["hook", "Hook (pembuka)"], ["turn", "Turn (belokan)"], ["proof", "Proof (bukti/isi)"], ["cta", "CTA (penutup)"]];
 const DG_BADGES = [["green", "Hijau (aman / berhasil)"], ["orange", "Oranye (aktif / proses)"], ["red", "Merah (bahaya / peringatan)"], ["blue", "Biru (info)"], ["grey", "Abu (netral)"]];
 const DG_COMPS = [["hp", "HP / ponsel"], ["bts", "Menara BTS"], ["server", "Server"], ["monitor", "Monitor / layar"], ["router", "Router"], ["cloud", "Cloud"], ["database", "Database"], ["orang", "Orang / pengguna"], ["rumah", "Rumah"], ["gembok", "Gembok / enkripsi"], ["chat", "Chat / pesan"], ["dokumen", "Dokumen"], ["kotak", "Kotak berlabel (umum)"], ["panel-surya", "Panel surya"], ["baterai", "Baterai"], ["bank", "Bank / gedung bank"], ["globe", "Globe / internet"], ["satelit", "Satelit"], ["mobil", "Mobil"], ["lampu", "Lampu / tiang lampu"], ["panah-panas", "Panah panas naik (Bedah)"], ["aliran", "Putaran aliran udara (Bedah)"]];
 const DG_FLOWS = [["panas", "Panas (oranye-merah)"], ["aliran", "Aliran (teal)"], ["netral", "Netral (abu)"]];
@@ -1404,6 +1405,12 @@ export default function ProjectWizard({ initial }) {
                       <label className={labelCls}>Waktu</label>
                       <select value={s.sb?.timeOfDay || ""} onChange={(e) => editSb(i, "timeOfDay", e.target.value)} className={inputCls}>
                         {SB_TIME_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Peran beat</label>
+                      <select value={s.sb?.beatRole || ""} onChange={(e) => editSb(i, "beatRole", e.target.value)} className={inputCls}>
+                        {SB_ROLE_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                       </select>
                     </div>
                   </div>
