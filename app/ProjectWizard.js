@@ -906,7 +906,13 @@ export default function ProjectWizard({ initial }) {
                 <label className={labelCls}>Gaya caption</label>
                 <select value={slCfg.captionStyle} onChange={(e) => setSlCfg({ ...slCfg, captionStyle: e.target.value })} className={inputCls}>
                   <option value="frasa">Frasa — kotak subtitle di bawah</option>
-                  <option value="satukata">Satu Kata — kata raksasa per ketukan, satu kata lime</option>
+                  <option value="karaoke">Karaoke — kata menyala berurutan</option>
+                  <option value="satukata">Satu Kata — kata raksasa per ketukan, kata terpanjang lime</option>
+                  <option value="editorial">Editorial — huruf besar rata kiri + aksen</option>
+                  <option value="minimal">Minimal — teks bersih tanpa kotak</option>
+                  <option value="dynamic">Dynamic — teks mengetik sendiri</option>
+                  <option value="highlight">Highlight — potongan kunci kotak lime</option>
+                  <option value="storytelling">Storytelling — pita bawah, per kalimat</option>
                 </select>
               </div>
               <div>

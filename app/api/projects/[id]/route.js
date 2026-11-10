@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { loadProject, saveProject, deleteProject, mergeScenes, sanitizeCharacters } from "../../../../lib/store.js";
 import { VISUAL_STYLE_IDS } from "../../../../lib/visualStyles.js";
 import { sanitizeAudioConfig } from "../../../../lib/audioPresets.js";
+import { sanitizeCaptionStyle } from "../../../../lib/captions.js";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export async function PATCH(req, { params }) {
     project.editorial = cur;
   }
   if (body.captionStyle !== undefined) {
-    project.captionStyle = body.captionStyle === "satukata" ? "satukata" : "frasa";
+    project.captionStyle = sanitizeCaptionStyle(body.captionStyle);
   }
   if (body.scriptTemplate !== undefined) {
     project.scriptTemplate = body.scriptTemplate === "andai" ? "andai" : "";

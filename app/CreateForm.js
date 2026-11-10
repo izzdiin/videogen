@@ -336,7 +336,13 @@ export default function CreateForm() {
             <label className={labelCls}>Gaya caption Slides</label>
             <select name="captionStyle" className={inputCls} value={captionStyle} onChange={(e) => setCaptionStyle(e.target.value)}>
               <option value="frasa">Frasa — kotak subtitle biasa di bawah</option>
-              <option value="satukata">Satu Kata — satu kata raksasa per ketukan (ala kartun 2D), satu kata disorot lime</option>
+              <option value="karaoke">Karaoke — kata menyala berurutan mengisi frasa</option>
+              <option value="satukata">Satu Kata — satu kata raksasa per ketukan (ala kartun 2D), kata terpanjang lime</option>
+              <option value="editorial">Editorial — huruf besar tebal rata kiri + batang aksen</option>
+              <option value="minimal">Minimal — teks bersih tanpa kotak</option>
+              <option value="dynamic">Dynamic — teks mengetik sendiri kata demi kata</option>
+              <option value="highlight">Highlight — potongan kunci tampil kotak lime</option>
+              <option value="storytelling">Storytelling — pita gelap di bawah, tampil per kalimat</option>
             </select>
             <p className="mt-1 text-xs text-white/40">Bisa diubah lagi di halaman proyek.</p>
           </div>
