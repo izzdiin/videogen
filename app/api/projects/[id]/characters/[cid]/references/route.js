@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import { loadProject, saveProject, projectDir, sweepAssetDir } from "../../../../../../../lib/store.js";
-import { generateImage, generateImageWorkersAI, generateImageVia9Router, generateImageViaBridge, generateImageViaVenice } from "../../../../../../../lib/ai.js";
+import { generateWithAdapter } from "../../../../../../../lib/imageAdapter.js";
 import { slidesImagePrompt } from "../../../../../../../lib/visualStyles.js";
 import { effectiveAppearance } from "../../../../../../../lib/characterIdentity.js";
 import { REF_KINDS, effectiveReferences, mirrorLegacyPortrait, refFileRel, referencePromptFor } from "../../../../../../../lib/characterReferences.js";
@@ -41,31 +41,29 @@ async function produceReference(project, character, kind, providerOverride) {
   const abs = path.join(projectDir(project.id), rel);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   const refs = effectiveReferences(character);
-  const derivedFrom = kind !== "portrait" && refs.portrait?.status === "ready" ? "portrait" : null;
+  const portraitReady = kind !== "portrait" && refs.portrait?.status === "ready";
   const pseudoScene = {
     imagePrompt: referencePromptFor(kind, character, effectiveAppearance(character)),
-    sb: null,
+    // CC2: penurunan kini sungguh berkondisi — resolver melihat karakter
+    // ini lewat sb.characters; mode yang benar-benar dipakai adapter
+    // (img2img/multi/teks) tercatat di conditioning hasilnya.
+    sb: portraitReady ? { characters: [character.id] } : null,
   };
   const prompt = slidesImagePrompt(project, pseudoScene);
-  let source = provider;
-  if (provider === "pollinations") {
-    const seed = refSeed(character);
-    await generateImage(prompt, abs, seed, undefined, project.aspect);
-    return { file: rel, source, seed, ...(derivedFrom ? { derivedFrom } : {}) };
-  }
-  if (provider === "sdxl-9router") {
-    await generateImageVia9Router(prompt, abs, project.aspect);
-  } else if (provider === "muse-bridge") {
-    await generateImageViaBridge(prompt, abs, project.aspect);
-  } else if (provider === "venice") {
-    await generateImageViaVenice(prompt, abs, project.aspect);
-  } else if (provider === "workers-ai") {
-    await generateImageWorkersAI(prompt, abs);
-  } else {
-    source = "sdxl-9router";
-    await generateImageVia9Router(prompt, abs, project.aspect);
-  }
-  return { file: rel, source, ...(derivedFrom ? { derivedFrom } : {}) };
+  const made = await generateWithAdapter({
+    project,
+    scene: pseudoScene,
+    prompt,
+    destFile: abs,
+    providerOverride,
+  });
+  return {
+    file: rel,
+    source: made.provider,
+    ...(Number.isFinite(made.seed) ? { seed: made.seed } : {}),
+    ...(portraitReady ? { derivedFrom: "portrait" } : {}),
+    conditioning: made.conditioning,
+  };
 }
 
 export async function GET(req, { params }) {

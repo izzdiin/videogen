@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import { loadProject, saveProject, projectDir, sweepAssetDir } from "../../../../../../../lib/store.js";
-import { generateImage, generateImageWorkersAI, generateImageVia9Router, generateImageViaBridge, generateImageViaVenice } from "../../../../../../../lib/ai.js";
+import { generateWithAdapter } from "../../../../../../../lib/imageAdapter.js";
 import { slidesImagePrompt } from "../../../../../../../lib/visualStyles.js";
 import { effectiveAppearance } from "../../../../../../../lib/characterIdentity.js";
 import { activeSceneJobs, sceneJobKey, SCENE_JOB_STALE_MS } from "../../../../../../../lib/jobs.js";
@@ -31,25 +31,16 @@ async function produceCharacterImage(project, character, providerOverride) {
     sb: null,
   };
   const prompt = slidesImagePrompt(project, pseudoScene);
-  let source = provider;
-  if (provider === "pollinations") {
-    const seed = Math.floor(Math.random() * 1_000_000);
-    await generateImage(prompt, abs, seed, undefined, project.aspect);
-    return { file: rel, source, seed };
-  }
-  if (provider === "sdxl-9router") {
-    await generateImageVia9Router(prompt, abs, project.aspect);
-  } else if (provider === "muse-bridge") {
-    await generateImageViaBridge(prompt, abs, project.aspect);
-  } else if (provider === "venice") {
-    await generateImageViaVenice(prompt, abs, project.aspect);
-  } else if (provider === "workers-ai") {
-    await generateImageWorkersAI(prompt, abs);
-  } else {
-    source = "sdxl-9router";
-    await generateImageVia9Router(prompt, abs, project.aspect);
-  }
-  return { file: rel, source };
+  // CC2: lewat adapter dengan scene=null — portrait memang dibuat dari
+  // teks (belum ada referensi untuk dirinya sendiri).
+  const made = await generateWithAdapter({
+    project,
+    scene: null,
+    prompt,
+    destFile: abs,
+    providerOverride,
+  });
+  return { file: rel, source: made.provider, ...(Number.isFinite(made.seed) ? { seed: made.seed } : {}) };
 }
 
 export async function POST(req, { params }) {

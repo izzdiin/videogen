@@ -5,7 +5,7 @@ import { promisify } from "util";
 import { NextResponse } from "next/server";
 import { loadProject, saveProject, projectDir, sweepAssetDir, layerRel } from "../../../../../../../lib/store.js";
 import { sanitizeLayerMotion } from "../../../../../../../lib/motion.js";
-import { generateImage, generateImageWorkersAI, generateImageVia9Router, generateImageViaBridge, generateImageViaVenice } from "../../../../../../../lib/ai.js";
+import { generateWithAdapter } from "../../../../../../../lib/imageAdapter.js";
 import { activeSceneJobs, sceneJobKey, SCENE_JOB_STALE_MS } from "../../../../../../../lib/jobs.js";
 
 const execFileP = promisify(execFile);
@@ -46,19 +46,8 @@ async function produceLayer(project, scene, prompt, providerOverride) {
   const srcAbs = path.join(projectDir(project.id), srcRel);
   fs.mkdirSync(path.dirname(srcAbs), { recursive: true });
   const fullPrompt = `${prompt}, single object isolated in the center of the frame on a solid pure green background (#00FF00), the whole object visible with margin around it, no shadow, no ground plane, no text`;
-  if (provider === "pollinations") {
-    await generateImage(fullPrompt, srcAbs, Math.floor(Math.random() * 1_000_000), undefined, "1:1");
-  } else if (provider === "sdxl-9router") {
-    await generateImageVia9Router(fullPrompt, srcAbs, "1:1");
-  } else if (provider === "muse-bridge") {
-    await generateImageViaBridge(fullPrompt, srcAbs, "1:1");
-  } else if (provider === "venice") {
-    await generateImageViaVenice(fullPrompt, srcAbs, "1:1");
-  } else if (provider === "workers-ai") {
-    await generateImageWorkersAI(fullPrompt, srcAbs);
-  } else {
-    await generateImageVia9Router(fullPrompt, srcAbs, "1:1");
-  }
+  // CC2: layer juga lewat adapter (mode teks, aspect 1:1 dipaksa).
+  await generateWithAdapter({ project, scene: null, prompt: fullPrompt, destFile: srcAbs, providerOverride, aspect: "1:1" });
   const outAbs = path.join(projectDir(project.id), layerRel(scene.id));
   await cutout(srcAbs, outAbs);
   fs.rmSync(srcAbs, { force: true });

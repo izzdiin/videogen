@@ -43,6 +43,7 @@ export default function SettingsForm() {
     bridgeKey: "",
     cfAccountId: "",
     cfToken: "",
+    cfAiModel: "",
     elevenlabsKey: "",
     veniceBase: "",
     veniceKey: "",
@@ -58,6 +59,7 @@ export default function SettingsForm() {
       ninerouterBase: s.ninerouterBase,
       bridgeBase: s.bridgeBase,
       cfAccountId: s.cfAccountId,
+      cfAiModel: s.cfAiModel,
       veniceBase: s.veniceBase,
       veniceImageModel: s.veniceImageModel,
     }));
@@ -178,6 +180,16 @@ export default function SettingsForm() {
           value={form.cfToken}
           onChange={set("cfToken")}
         />
+        <div>
+          <label className={labelCls}>Model gambar</label>
+          <input
+            name="cfAiModel"
+            value={form.cfAiModel}
+            onChange={set("cfAiModel")}
+            className={inputCls}
+          />
+          <p className="mt-1 text-[11px] text-white/40">Model FLUX.2 (bawaan @cf/black-forest-labs/flux-2-klein-4b, atau flux-2-dev) menerima gambar referensi karakter untuk konsistensi (CC2). Model lama flux-1-schnell hanya teks — tanpa conditioning. Token harus punya izin Workers AI pada akun di atas; error "Authentication error" berarti token ditolak untuk akun/model ini.</p>
+        </div>
       </Group>
 
       <Group

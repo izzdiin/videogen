@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import { NextResponse } from "next/server";
 import { loadProject, saveProject, projectDir, imageRel, sweepAssetDir } from "../../../../../../../lib/store.js";
-import { generateImage, generateImageWorkersAI, generateImageVia9Router, generateImageViaBridge, generateImageViaVenice } from "../../../../../../../lib/ai.js";
+import { generateWithAdapter } from "../../../../../../../lib/imageAdapter.js";
 import { b2ArtPrompt, b3ArtPrompt } from "../../../../../../../lib/stickman.js";
 import { slidesImagePrompt } from "../../../../../../../lib/visualStyles.js";
 import { editorialImagePrompt } from "../../../../../../../lib/editorial.js";
@@ -11,8 +11,10 @@ import { activeSceneJobs, sceneJobKey, SCENE_JOB_STALE_MS } from "../../../../..
 export const dynamic = "force-dynamic";
 
 // Isi scene.image dengan gambar hasil generate, sesuai mesin & penyedia
-// gambar proyek. Melempar Error bila gagal; penulisan status akhir ke
-// project.json diatur pemanggil.
+// gambar proyek. Sejak CC2 semua jalur lewat Image Generation Adapter:
+// mode conditioning (multi/img2img/teks) dipilih dari referensi karakter
+// scene dan dicatat di scene.image.conditioning. Melempar Error bila
+// gagal; penulisan status akhir ke project.json diatur pemanggil.
 async function produceImage(project, scene, providerOverride) {
   if (!scene.imagePrompt?.trim()) throw new Error("Prompt gambar scene ini masih kosong.");
   const provider = providerOverride || project.executors.imageProvider || "pollinations";
@@ -20,57 +22,27 @@ async function produceImage(project, scene, providerOverride) {
     throw new Error("Penyedia gambar proyek ini 'unggah manual' — unggah berkas gambar untuk scene ini.");
   }
   const rel = imageRel(scene.id);
-  if (project.engine === "editorial") {
-    if (provider === "pollinations") {
-      const seed = Math.floor(Math.random() * 1_000_000);
-      await generateImage(editorialImagePrompt(project, scene), path.join(projectDir(project.id), rel), seed, undefined, project.aspect);
-      scene.image = { status: "ready", file: rel, seed, source: "pollinations", updatedAt: new Date().toISOString() };
-    } else if (provider === "muse-bridge") {
-      await generateImageViaBridge(editorialImagePrompt(project, scene), path.join(projectDir(project.id), rel), project.aspect);
-      scene.image = { status: "ready", file: rel, source: "muse-bridge", updatedAt: new Date().toISOString() };
-    } else if (provider === "workers-ai") {
-      await generateImageWorkersAI(editorialImagePrompt(project, scene), path.join(projectDir(project.id), rel));
-      scene.image = { status: "ready", file: rel, source: "workers-ai", updatedAt: new Date().toISOString() };
-    } else if (provider === "venice") {
-      await generateImageViaVenice(editorialImagePrompt(project, scene), path.join(projectDir(project.id), rel), project.aspect);
-      scene.image = { status: "ready", file: rel, source: "venice", updatedAt: new Date().toISOString() };
-    } else {
-      await generateImageVia9Router(editorialImagePrompt(project, scene), path.join(projectDir(project.id), rel), project.aspect);
-      scene.image = { status: "ready", file: rel, source: "sdxl-9router", updatedAt: new Date().toISOString() };
-    }
-  } else if (project.engine === "stickman" && ["B2", "B3"].includes(project.stickStyle || "B1")) {
-    const artPrompt = project.stickStyle === "B3" ? b3ArtPrompt : b2ArtPrompt;
-    if (provider === "pollinations") {
-      const seed = Math.floor(Math.random() * 1_000_000);
-      await generateImage(artPrompt(scene), path.join(projectDir(project.id), rel), seed, undefined, project.aspect);
-      scene.image = { status: "ready", file: rel, seed, source: "pollinations", updatedAt: new Date().toISOString() };
-    } else if (provider === "muse-bridge") {
-      await generateImageViaBridge(artPrompt(scene), path.join(projectDir(project.id), rel), project.aspect);
-      scene.image = { status: "ready", file: rel, source: "muse-bridge", updatedAt: new Date().toISOString() };
-    } else if (provider === "venice") {
-      await generateImageViaVenice(artPrompt(scene), path.join(projectDir(project.id), rel), project.aspect);
-      scene.image = { status: "ready", file: rel, source: "venice", updatedAt: new Date().toISOString() };
-    } else {
-      await generateImageVia9Router(artPrompt(scene), path.join(projectDir(project.id), rel), project.aspect);
-      scene.image = { status: "ready", file: rel, source: "sdxl-9router", updatedAt: new Date().toISOString() };
-    }
-  } else if (provider === "sdxl-9router") {
-    await generateImageVia9Router(slidesImagePrompt(project, scene), path.join(projectDir(project.id), rel), project.aspect);
-    scene.image = { status: "ready", file: rel, source: "sdxl-9router", updatedAt: new Date().toISOString() };
-  } else if (provider === "muse-bridge") {
-    await generateImageViaBridge(slidesImagePrompt(project, scene), path.join(projectDir(project.id), rel), project.aspect);
-    scene.image = { status: "ready", file: rel, source: "muse-bridge", updatedAt: new Date().toISOString() };
-  } else if (provider === "workers-ai") {
-    await generateImageWorkersAI(slidesImagePrompt(project, scene), path.join(projectDir(project.id), rel));
-    scene.image = { status: "ready", file: rel, source: "workers-ai", updatedAt: new Date().toISOString() };
-  } else if (provider === "venice") {
-    await generateImageViaVenice(slidesImagePrompt(project, scene), path.join(projectDir(project.id), rel), project.aspect);
-    scene.image = { status: "ready", file: rel, source: "venice", updatedAt: new Date().toISOString() };
-  } else {
-    const seed = Math.floor(Math.random() * 1_000_000);
-    await generateImage(slidesImagePrompt(project, scene), path.join(projectDir(project.id), rel), seed, undefined, project.aspect);
-    scene.image = { status: "ready", file: rel, seed, source: "pollinations", updatedAt: new Date().toISOString() };
-  }
+  const prompt =
+    project.engine === "editorial"
+      ? editorialImagePrompt(project, scene)
+      : project.engine === "stickman" && ["B2", "B3"].includes(project.stickStyle || "B1")
+        ? (project.stickStyle === "B3" ? b3ArtPrompt : b2ArtPrompt)(scene)
+        : slidesImagePrompt(project, scene);
+  const made = await generateWithAdapter({
+    project,
+    scene,
+    prompt,
+    destFile: path.join(projectDir(project.id), rel),
+    providerOverride,
+  });
+  scene.image = {
+    status: "ready",
+    file: rel,
+    ...(Number.isFinite(made.seed) ? { seed: made.seed } : {}),
+    source: made.provider,
+    conditioning: made.conditioning,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export async function POST(req, { params }) {

@@ -1193,7 +1193,7 @@ export default function ProjectWizard({ initial }) {
                             <span className="text-xs font-bold text-sky-200">Reference Manager</span>
                             <span className="text-[11px] text-white/40">seed karakter: {saved?.seed ?? c.seed ?? "—"}</span>
                           </div>
-                          <p className="mb-2 text-[11px] text-white/35">Tiga referensi per karakter. Full body & expression sheet diturunkan dari portrait (generate portrait dulu). Di CC1 penurunannya memakai prompt teks yang diperkuat; conditioning visual menyusul di CC2.</p>
+                          <p className="mb-2 text-[11px] text-white/35">Tiga referensi per karakter. Full body & expression sheet diturunkan dari portrait (generate portrait dulu). Sejak CC2 penurunannya memakai conditioning visual bila provider mendukungnya (SDXL via 9Router: img2img dari portrait; Workers AI FLUX.2: multi-reference), selain itu teks — mode yang benar-benar dipakai tercatat di tiap referensi.</p>
                           <div className="grid gap-2 md:grid-cols-3">
                             {[["portrait", "Portrait"], ["fullbody", "Full body"], ["expressions", "Expressions"]].map(([kind, label]) => {
                               const r = (saved?.references || c.references || {})[kind] || (kind === "portrait" ? ref : { status: "none" });
@@ -1758,6 +1758,14 @@ export default function ProjectWizard({ initial }) {
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
                     <div className="rounded-lg border border-white/10 p-2">
                       <div className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Gambar latar{staleBadge(s.image)}</div>
+                      {s.image?.conditioning && (
+                        <p className="mt-1 text-[11px] text-white/45">
+                          Conditioning: <span className={s.image.conditioning.mode === "text" ? "text-white/60" : "font-semibold text-emerald-300"}>{s.image.conditioning.mode === "multi" ? "multi-ref" : s.image.conditioning.mode}</span>
+                          {s.image.conditioning.refs?.length ? ` · ref: ${s.image.conditioning.refs.join(", ")}` : ""}
+                          {s.image.conditioning.degraded ? " · jalur referensi gagal, jatuh ke teks" : ""}
+                          <span className="text-white/30"> · {s.image.conditioning.provider}</span>
+                        </p>
+                      )}
                       <div className="relative mt-2 aspect-[9/16] max-h-60 overflow-hidden rounded bg-white/5">
                         {s.image?.status === "ready" ? (
                           <img src={assetUrl(s.image)} alt={`Gambar scene ${i + 1}`} className="h-full w-full object-cover" />
