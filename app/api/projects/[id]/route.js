@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { loadProject, saveProject, deleteProject, mergeScenes, sanitizeCharacters } from "../../../../lib/store.js";
+import { loadProject, saveProject, deleteProject, mergeScenes, sanitizeCharacters, sanitizeSeries } from "../../../../lib/store.js";
 import { VISUAL_STYLE_IDS } from "../../../../lib/visualStyles.js";
 import { sanitizeAudioConfig } from "../../../../lib/audioPresets.js";
 import { sanitizeCaptionStyle } from "../../../../lib/captions.js";
@@ -41,6 +41,13 @@ export async function PATCH(req, { params }) {
     if (typeof body.editorial.watermark === "string") cur.watermark = body.editorial.watermark.slice(0, 80);
     if (/^#[0-9a-fA-F]{6}$/.test(body.editorial.accent || "")) cur.accent = body.editorial.accent;
     project.editorial = cur;
+  }
+  if (body.series !== undefined) {
+    if (body.series === null) project.series = null;
+    else {
+      const s = sanitizeSeries({ ...body.series, episode: project.series?.episode || 1 });
+      if (s) project.series = s;
+    }
   }
   if (body.captionStyle !== undefined) {
     project.captionStyle = sanitizeCaptionStyle(body.captionStyle);

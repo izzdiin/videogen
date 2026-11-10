@@ -719,6 +719,9 @@ export default function ProjectWizard({ initial }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">{project.title}</h1>
+          {project.series && (
+            <span className="mt-1 inline-block rounded bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">📺 Seri {project.series.name} · Episode {project.series.episode}</span>
+          )}
           <p className="mt-1 max-w-2xl text-sm text-white/60">{project.theme}</p>
           <div className="mt-2 flex gap-2 text-xs text-white/50">
             <span className="rounded bg-white/10 px-2 py-0.5 uppercase">{project.audience === "en" ? "English" : "Indonesia"}</span>

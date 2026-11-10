@@ -38,6 +38,11 @@ export default function HomePage() {
               <div className="mt-2 text-xs text-white/50">
                 {p.sceneCount} scene · diubah {new Date(p.updatedAt).toLocaleString("id-ID")}
               </div>
+              {p.series && (
+                <div className="mt-2 inline-block rounded bg-sky-500/20 px-2 py-0.5 text-xs text-sky-300">
+                  📺 {p.series.name} · Eps {p.series.episode}
+                </div>
+              )}
               {p.hasFinal && (
                 <div className="mt-2 inline-block rounded bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
                   Video final selesai

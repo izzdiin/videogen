@@ -4,6 +4,7 @@ import { VOICES, GEMINI_VOICES, MUSE_VOICES, ELEVENLABS_VOICES, defaultVoice, de
 import { VISUAL_STYLES } from "../lib/visualStyles.js";
 import { AUDIO_PRESETS } from "../lib/audioPresets.js";
 import ModelPicker from "./ModelPicker.js";
+import IdeaGenerator from "./IdeaGenerator.js";
 import VoicePreview from "./VoicePreview.js";
 
 const inputCls = "w-full rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm outline-none focus:border-amber-400/60";
@@ -27,6 +28,7 @@ export default function CreateForm() {
   const [scriptTemplate, setScriptTemplate] = useState("");
   const [dgMode, setDgMode] = useState("akumulasi");
   const [audioPreset, setAudioPreset] = useState("edukatif");
+  const [seriesCtx, setSeriesCtx] = useState(null);
   const [plan, setPlan] = useState(null);
   const [planBusy, setPlanBusy] = useState(false);
   const [planError, setPlanError] = useState("");
@@ -80,6 +82,15 @@ export default function CreateForm() {
     setPlanApplied(true);
   }
 
+  function pickIdea({ idea, series }) {
+    setTitle(idea.judul || "");
+    setTheme(idea.tema || "");
+    setSeriesCtx(series || null);
+    setPlan(null);
+    setPlanApplied(false);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
@@ -114,6 +125,7 @@ export default function CreateForm() {
       mode: fd.get("mode"),
       audioPreset,
       director: planApplied && plan ? plan : undefined,
+      series: seriesCtx ? { name: seriesCtx.name, concept: seriesCtx.concept || "" } : undefined,
     };
     try {
       const res = await fetch("/api/projects", {
@@ -133,6 +145,9 @@ export default function CreateForm() {
   return (
     <form onSubmit={submit} className="grid gap-4 rounded-xl border border-white/10 bg-white/5 p-4 md:grid-cols-2">
       <div className="md:col-span-2">
+        <IdeaGenerator onPick={pickIdea} scriptModel={scriptModel} audience={audience} />
+      </div>
+      <div className="md:col-span-2">
         <label className={labelCls}>Judul proyek</label>
         <input name="title" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="mis. Potensi Krisis Minyak" className={inputCls} />
       </div>
@@ -140,6 +155,12 @@ export default function CreateForm() {
         <label className={labelCls}>Tema / ide video</label>
         <textarea name="theme" required rows={3} value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="Jelaskan ide videonya: topik, sudut pandang, data atau pesan utama..." className={inputCls} />
       </div>
+      {seriesCtx && (
+        <div className="md:col-span-2 -mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs text-sky-200">
+          <span>📺 Proyek ini akan menjadi episode berikutnya dari seri <b>{seriesCtx.name}</b> — nomor episode dihitung otomatis oleh server.</span>
+          <button type="button" onClick={() => setSeriesCtx(null)} className="rounded bg-white/10 px-2 py-0.5 font-semibold hover:bg-white/20">Lepas dari seri</button>
+        </div>
+      )}
       <div className="md:col-span-2 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
