@@ -19,6 +19,10 @@ const STICK_PROPS = [
 const STICK_POSES = [[0, "Mencondong / berpikir"], [1, "Berdiri menyajikan"], [2, "Beraksi"]];
 const STICK_SFX = [["", "Tanpa efek"], ["pop", "Pop"], ["tap", "Tap"], ["paper", "Kertas"], ["chime", "Chime"]];
 const DC_KINDS = [["hook", "Pembuka (hook)"], ["problem", "Masalah"], ["result", "Hasil / rekap"]];
+const SB_SHOT_OPTS = [["wide", "Wide (establishing)"], ["medium", "Medium"], ["close-up", "Close-up"], ["detail", "Detail (ekstrem)"], ["aerial", "Aerial"]];
+const SB_CAMERA_OPTS = [["static", "Diam"], ["zoom-in", "Zoom in"], ["zoom-out", "Zoom out"], ["pan-left", "Pan kiri"], ["pan-right", "Pan kanan"], ["tilt-up", "Tilt atas"], ["tilt-down", "Tilt bawah"]];
+const SB_TIME_OPTS = [["", "—"], ["pagi", "Pagi"], ["siang", "Siang"], ["sore", "Sore"], ["malam", "Malam"]];
+const SB_TRANSITION_OPTS = [["cut", "Cut"], ["fade", "Fade"], ["slide", "Slide"]];
 const DG_BADGES = [["green", "Hijau (aman / berhasil)"], ["orange", "Oranye (aktif / proses)"], ["red", "Merah (bahaya / peringatan)"], ["blue", "Biru (info)"], ["grey", "Abu (netral)"]];
 const DG_COMPS = [["hp", "HP / ponsel"], ["bts", "Menara BTS"], ["server", "Server"], ["monitor", "Monitor / layar"], ["router", "Router"], ["cloud", "Cloud"], ["database", "Database"], ["orang", "Orang / pengguna"], ["rumah", "Rumah"], ["gembok", "Gembok / enkripsi"], ["chat", "Chat / pesan"], ["dokumen", "Dokumen"], ["kotak", "Kotak berlabel (umum)"], ["panel-surya", "Panel surya"], ["baterai", "Baterai"], ["bank", "Bank / gedung bank"], ["globe", "Globe / internet"], ["satelit", "Satelit"], ["mobil", "Mobil"], ["lampu", "Lampu / tiang lampu"], ["panah-panas", "Panah panas naik (Bedah)"], ["aliran", "Putaran aliran udara (Bedah)"]];
 const DG_FLOWS = [["panas", "Panas (oranye-merah)"], ["aliran", "Aliran (teal)"], ["netral", "Netral (abu)"]];
@@ -165,6 +169,8 @@ export default function ProjectWizard({ initial }) {
   });
   const [stickStyle, setStickStyle] = useState(initial.stickStyle || "B1");
   const [audioCfg, setAudioCfg] = useState(initial.audio || audioFromPreset("edukatif"));
+  const [chars, setChars] = useState(initial.characters || []);
+  const [sheet, setSheet] = useState(null);
   const [visualStyle, setVisualStyle] = useState(initial.visualStyle || "bebas");
   const [imgProv, setImgProv] = useState({});
   const [voProv, setVoProv] = useState({});
@@ -234,7 +240,8 @@ export default function ProjectWizard({ initial }) {
 
   const anyGenerating =
     scenes.some((s) => s.image?.status === "generating" || s.vo?.status === "generating") ||
-    project.poll?.vo?.status === "generating";
+    project.poll?.vo?.status === "generating" ||
+    (project.characters || []).some((c) => c.referenceImage?.status === "generating");
 
   useEffect(() => {
     const onWake = () => { if (document.visibilityState === "visible") refreshAssets(); };
@@ -411,6 +418,54 @@ export default function ProjectWizard({ initial }) {
       setProject(data.project);
     });
 
+  // --- Character sheet (Fase A) ---
+  const saveChars = () =>
+    call("saveChars", async () => {
+      const data = await jsonFetch(`/api/projects/${id}`, "PATCH", { characters: chars });
+      setProject(data.project);
+      setChars(data.project.characters || []);
+    });
+  const addChar = () =>
+    setChars((prev) => [...prev, { id: "tmp-" + Math.random().toString(36).slice(2, 9), name: "", appearance: "", referenceImage: { status: "none" } }]);
+  const editChar = (idx, field, value) =>
+    setChars((prev) => prev.map((c, i) => (i === idx ? { ...c, [field]: value } : c)));
+  const removeChar = (idx) => setChars((prev) => prev.filter((_, i) => i !== idx));
+  const uploadCharRef = (c, file) => {
+    if (!file || !c?.id || c.id.startsWith("tmp-")) return;
+    call("charRef-" + c.id, async () => {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/projects/${id}/characters/${c.id}/image`, { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setProject(data.project);
+      setChars(data.project.characters || []);
+    });
+  };
+  const genCharRef = (c) => {
+    if (!c?.id || c.id.startsWith("tmp-")) return;
+    call("charRef-" + c.id, async () => {
+      const data = await jsonFetch(`/api/projects/${id}/characters/${c.id}/image`, "POST", {});
+      setProject(data.project);
+      setChars(data.project.characters || []);
+    });
+  };
+  const deleteCharRef = (c) => {
+    if (!c?.id || c.id.startsWith("tmp-")) return;
+    call("charRef-" + c.id, async () => {
+      const data = await jsonFetch(`/api/projects/${id}/characters/${c.id}/image`, "DELETE");
+      setProject(data.project);
+      setChars(data.project.characters || []);
+    });
+  };
+  const makeSheet = () =>
+    call("sheet", async () => {
+      const res = await fetch(`/api/projects/${id}/contact-sheet`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setSheet(data);
+    });
+
   const saveDc = () =>
     call("saveDc", async () => {
       const data = await jsonFetch(`/api/projects/${id}`, "PATCH", { darkcard: dcCfg });
@@ -497,6 +552,16 @@ export default function ProjectWizard({ initial }) {
   function editEd(idx, field, value) {
     setScenes((prev) =>
       prev.map((s, i) => (i === idx ? { ...s, ed: { ...(s.ed || {}), [field]: value } } : s))
+    );
+    setDirty(true);
+  }
+  function editSb(idx, field, value) {
+    setScenes((prev) =>
+      prev.map((s, i) =>
+        i === idx
+          ? { ...s, sb: { shotType: "medium", camera: "static", location: "", timeOfDay: "", characters: [], transitionIn: "cut", ...(s.sb || {}), [field]: value } }
+          : s
+      )
     );
     setDirty(true);
   }
@@ -885,6 +950,64 @@ export default function ProjectWizard({ initial }) {
 
       {/* Tahap 1 */}
       <Section no={1} title="Naskah & prompt" desc="Buat naskah dengan model terpilih, lalu koreksi bebas: ubah teks, hapus scene, tambah scene, geser urutan. Simpan sebelum lanjut.">
+        {project.engine === "slides" && (
+          <div className="mb-4 rounded-lg border border-sky-300/20 bg-sky-400/5 p-3">
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <span className="text-sm font-bold text-sky-200">Karakter & Konsistensi</span>
+              <span className="ml-auto flex gap-1">
+                <button onClick={addChar} className={btnCls}>+ Tambah karakter</button>
+                <button onClick={saveChars} disabled={busy === "saveChars"} className={btnCls}>{busy === "saveChars" ? "Menyimpan..." : "Simpan karakter"}</button>
+              </span>
+            </div>
+            <p className="mb-2 text-xs text-white/40"> Definisikan karakter SEKALI di sini: blok penampilannya disisipkan persis sama ke prompt gambar setiap scene tempat ia hadir (dipilih di panel storyboard tiap scene), menjaga rupa tetap konsisten antar-scene. Tulis penampilan dalam bahasa Inggris, sangat spesifik: usia, wajah, rambut, pakaian khas, warna dominan. Buat naskah sesudah menyimpan karakter agar penulis naskah bisa menugaskan mereka per scene.</p>
+            {chars.length === 0 && <p className="text-xs text-white/40">Belum ada karakter. Proyek tanpa karakter tetap jalan seperti biasa.</p>}
+            <div className="space-y-3">
+              {chars.map((c, ci) => {
+                const saved = (project.characters || []).find((x) => x.id === c.id);
+                const ref = saved?.referenceImage || c.referenceImage || { status: "none" };
+                const isTmp = !c.id || c.id.startsWith("tmp-");
+                return (
+                  <div key={c.id || ci} className="rounded-lg border border-white/10 bg-black/20 p-2">
+                    <div className="flex flex-wrap gap-3">
+                      <div className="flex w-24 flex-col items-center gap-1">
+                        {ref.status === "ready" ? (
+                          <img src={assetUrl(ref)} alt={c.name || "karakter"} className="h-28 w-24 rounded object-cover" />
+                        ) : (
+                          <div className="flex h-28 w-24 items-center justify-center rounded bg-white/5 px-1 text-center text-[11px] text-white/40">
+                            {ref.status === "generating" ? "sedang dibuat…" : ref.status === "error" ? "gagal dibuat" : "belum ada gambar referensi"}
+                          </div>
+                        )}
+                        <span className="flex flex-wrap justify-center gap-1">
+                          <button onClick={() => genCharRef(c)} disabled={isTmp || busy === "charRef-" + c.id || ref.status === "generating"} className={btnCls} title={isTmp ? "Simpan karakter dulu" : "Buat gambar referensi dari deskripsi penampilan"}>
+                            {ref.status === "ready" ? "Generate ulang" : "Generate"}
+                          </button>
+                          <label className={btnCls + (isTmp ? " pointer-events-none opacity-40" : " cursor-pointer")} title={isTmp ? "Simpan karakter dulu" : ""}>
+                            Unggah
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => uploadCharRef(c, e.target.files?.[0])} />
+                          </label>
+                          {ref.status === "ready" && (
+                            <button onClick={() => deleteCharRef(c)} disabled={busy === "charRef-" + c.id} className={btnCls}>Hapus gbr</button>
+                          )}
+                        </span>
+                      </div>
+                      <div className="min-w-52 flex-1 space-y-2">
+                        <div>
+                          <label className={labelCls}>Nama karakter</label>
+                          <input value={c.name} onChange={(e) => editChar(ci, "name", e.target.value)} placeholder="mis. Pak Harun" className={inputCls} />
+                        </div>
+                        <div>
+                          <label className={labelCls}>Penampilan baku (Inggris)</label>
+                          <textarea rows={3} value={c.appearance} onChange={(e) => editChar(ci, "appearance", e.target.value)} placeholder="mis. a 58-year-old Indonesian man, round face, short grey hair, glasses, wearing a faded brown batik shirt and dark trousers" className={inputCls} />
+                        </div>
+                        <button onClick={() => removeChar(ci)} className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/25">Hapus karakter</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div className="mb-3 flex flex-wrap gap-2">
           <button onClick={genScript} disabled={busy === "script" || jobBusy} className={btnAmber}>
             {busy === "script" ? "Menulis naskah..." : scenes.length ? "Buat ulang naskah" : "Buat naskah"}
@@ -1178,6 +1301,57 @@ export default function ProjectWizard({ initial }) {
                   <textarea rows={2} value={s.imagePrompt} onChange={(e) => editScene(i, "imagePrompt", e.target.value)} className={inputCls} />
                 </div>
               )}
+              {(project.engine === "slides" || project.engine === "editorial") && (
+                <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-2">
+                  <span className="text-[11px] font-bold tracking-wide text-sky-200/80">STORYBOARD</span>
+                  <div className="mt-1 grid gap-2 md:grid-cols-3">
+                    <div>
+                      <label className={labelCls}>Jenis bidikan</label>
+                      <select value={s.sb?.shotType || "medium"} onChange={(e) => editSb(i, "shotType", e.target.value)} className={inputCls}>
+                        {SB_SHOT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Gerakan kamera</label>
+                      <select value={s.sb?.camera || "static"} onChange={(e) => editSb(i, "camera", e.target.value)} className={inputCls}>
+                        {SB_CAMERA_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Transisi masuk</label>
+                      <select value={s.sb?.transitionIn || "cut"} onChange={(e) => editSb(i, "transitionIn", e.target.value)} className={inputCls}>
+                        {SB_TRANSITION_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Lokasi</label>
+                      <input value={s.sb?.location || ""} onChange={(e) => editSb(i, "location", e.target.value)} placeholder="mis. small kitchen" className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Waktu</label>
+                      <select value={s.sb?.timeOfDay || ""} onChange={(e) => editSb(i, "timeOfDay", e.target.value)} className={inputCls}>
+                        {SB_TIME_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  {project.engine === "slides" && (project.characters || []).length > 0 && (
+                    <div className="mt-2">
+                      <label className={labelCls}>Karakter hadir di scene ini</label>
+                      <div className="flex flex-wrap gap-1">
+                        {(project.characters || []).map((c) => {
+                          const on = (s.sb?.characters || []).includes(c.id);
+                          return (
+                            <button key={c.id} onClick={() => editSb(i, "characters", on ? (s.sb?.characters || []).filter((x) => x !== c.id) : [...(s.sb?.characters || []), c.id])} className={on ? btnAmber : btnCls}>
+                              {on ? "✓ " : ""}{c.name || "(tanpa nama)"}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  <p className="mt-1 text-xs text-white/40">Storyboard tersimpan otomatis bersama naskah dan tercermin ke storyboard.json. Jenis bidikan masuk ke prompt gambar; gerakan kamera dipakai prompt video Flow dan motion render pada fase berikutnya.</p>
+                </div>
+              )}
             </div>
           ))}
           {scenes.length === 0 && <p className="text-sm text-white/50">Belum ada naskah. Klik "Buat naskah" atau tambah scene manual.</p>}
@@ -1187,6 +1361,15 @@ export default function ProjectWizard({ initial }) {
       {/* Tahap 2 */}
       <Section no={2} title={project.engine === "stickman" ? (["B2", "B3"].includes(project.stickStyle || "B1") ? "Ilustrasi scene" : "Properti & pose") : project.engine === "darkcard" ? "Tumpukan kartu" : project.engine === "diagram" ? "Diagram" : project.engine === "editorial" ? "Gambar hero" : project.engine === "slides" ? "Visual scene" : "Gambar latar"} desc={project.engine === "stickman" ? ((project.stickStyle || "B1") === "B3" ? "Setiap scene B3 adalah ilustrasi siluet putih/abu satu frame penuh (SDXL) di bidang nyaris hitam dari arahan gambar di tahap 1, atau unggah ilustrasimu sendiri. Tanpa ilustrasi, scene tampil sebagai judul di atas bidang gelap." : (project.stickStyle || "B1") === "B2" ? "Setiap scene B2 adalah ilustrasi warna satu frame penuh (SDXL, gaya hand-drawn di kertas krem) dari arahan gambar di tahap 1, atau unggah ilustrasimu sendiri. Tanpa ilustrasi, scene tampil sebagai judul di atas kertas krem." : "Mode stickman digambar dari pose karakter dan properti crayon bawaan B1 yang dipilih di tahap 1. Properti khusus dibuat otomatis (SDXL gaya crayon) saat mode otomatis berjalan atau sebelum render.") : project.engine === "darkcard" ? "Dark Card tidak memakai gambar: setiap scene menambah satu kartu ke tumpukan yang tampil terus. Urutan tumpukan mengikuti urutan scene; kartu diatur di tahap 1." : project.engine === "diagram" ? "Diagram tidak memakai gambar: satu diagram vektor dibangun bertahap — komponen muncul dan tersambung kabel mengikuti perintah tiap scene dari tahap 1, kamera menyapu ke bagian yang baru. Ringkasan keadaan diagram per scene:" : project.engine === "editorial" ? "Setiap scene Editorial adalah SATU gambar objek hero dari arahan gambar di tahap 1 (gaya kolase editorial ditambahkan otomatis), atau unggah gambarmu sendiri — paling bagus objek tunggal di latar polos krem. Tanpa gambar, scene tidak bisa dirender." : project.engine === "slides" ? "Tiap scene bisa memakai gambar latar atau video Google Flow — boleh dicampur dalam satu video. Generate ulang gambar bisa memakai penyedia berbeda per scene; video Flow dibuat manual dari prompt siap salin lalu diunggah per scene." : "Generate per scene dari prompt di tahap 1, atau unggah gambar sendiri (potret 9:16 disarankan)."}>
         {dirty && <p className="mb-2 text-xs text-amber-300">Ada perubahan naskah belum disimpan — generate memakai prompt yang tersimpan di server.</p>}
+        {project.engine === "slides" && (
+          <div className="mb-3 rounded-lg border border-white/10 bg-black/20 p-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-white/70">Contact sheet — periksa konsistensi karakter & gaya sekilas</span>
+              <button onClick={makeSheet} disabled={busy === "sheet"} className={btnCls + " ml-auto"}>{busy === "sheet" ? "Membuat..." : sheet ? "Buat ulang contact sheet" : "Buat contact sheet"}</button>
+            </div>
+            {sheet?.file && <img src={fileUrl(sheet.file) + `?v=${encodeURIComponent(sheet.updatedAt || "")}`} alt="Contact sheet semua scene" style={{ maxHeight: 420 }} className="mt-2 w-auto rounded" />}
+          </div>
+        )}
         {project.engine === "stickman" && (project.stickStyle || "B1") === "B1" ? (
           <div className="space-y-2">
             {scenes.map((s, i) => (

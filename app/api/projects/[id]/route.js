@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { loadProject, saveProject, deleteProject, mergeScenes } from "../../../../lib/store.js";
+import { loadProject, saveProject, deleteProject, mergeScenes, sanitizeCharacters } from "../../../../lib/store.js";
 import { VISUAL_STYLE_IDS } from "../../../../lib/visualStyles.js";
 import { sanitizeAudioConfig } from "../../../../lib/audioPresets.js";
 
@@ -60,6 +60,17 @@ export async function PATCH(req, { params }) {
   if (body.audio && typeof body.audio === "object") {
     // Aset BGM dipertahankan dari server; klien hanya mengubah parameter.
     project.audio = sanitizeAudioConfig(body.audio, project.audio?.bgm || { status: "none" });
+  }
+  if (Array.isArray(body.characters)) {
+    // Character sheet (Fase A): referenceImage dipertahankan dari server;
+    // rujukan karakter yang terhapus dibersihkan dari storyboard scene.
+    project.characters = sanitizeCharacters(body.characters, project.characters || []);
+    const valid = new Set(project.characters.map((c) => c.id));
+    for (const s of project.scenes || []) {
+      if (s.sb && Array.isArray(s.sb.characters)) {
+        s.sb.characters = s.sb.characters.filter((x) => valid.has(x));
+      }
+    }
   }
   if (["B1", "B2", "B3"].includes(body.stickStyle)) project.stickStyle = body.stickStyle;
   if (VISUAL_STYLE_IDS.includes(body.visualStyle)) project.visualStyle = body.visualStyle;
