@@ -4,6 +4,7 @@ import { VOICES, GEMINI_VOICES, MUSE_VOICES, ELEVENLABS_VOICES, isGeminiVoice, i
 import { DC_ICONS } from "../lib/dc-icons.js";
 import { VISUAL_STYLES, flowVideoPrompt } from "../lib/visualStyles.js";
 import { AUDIO_PRESETS, audioFromPreset } from "../lib/audioPresets.js";
+import { MOTION_PRESETS, LAYER_MOTION_PRESETS, presetKeyframes } from "../lib/motion.js";
 import ModelPicker from "./ModelPicker.js";
 import VoicePreview from "./VoicePreview.js";
 
@@ -171,6 +172,7 @@ export default function ProjectWizard({ initial }) {
   const [audioCfg, setAudioCfg] = useState(initial.audio || audioFromPreset("edukatif"));
   const [chars, setChars] = useState(initial.characters || []);
   const [sheet, setSheet] = useState(null);
+  const [layerPrompt, setLayerPrompt] = useState({});
   const [visualStyle, setVisualStyle] = useState(initial.visualStyle || "bebas");
   const [imgProv, setImgProv] = useState({});
   const [voProv, setVoProv] = useState({});
@@ -231,7 +233,7 @@ export default function ProjectWizard({ initial }) {
         setScenes((prev) =>
           prev.map((s) => {
             const fresh = data.project.scenes.find((x) => x.id === s.id);
-            return fresh ? { ...s, image: fresh.image, vo: fresh.vo, video: fresh.video, sfx: fresh.sfx } : s;
+            return fresh ? { ...s, image: fresh.image, vo: fresh.vo, video: fresh.video, sfx: fresh.sfx, layer: fresh.layer } : s;
           })
         );
       }
@@ -239,7 +241,7 @@ export default function ProjectWizard({ initial }) {
   }
 
   const anyGenerating =
-    scenes.some((s) => s.image?.status === "generating" || s.vo?.status === "generating") ||
+    scenes.some((s) => s.image?.status === "generating" || s.vo?.status === "generating" || s.layer?.status === "generating") ||
     project.poll?.vo?.status === "generating" ||
     (project.characters || []).some((c) => c.referenceImage?.status === "generating");
 
@@ -465,6 +467,61 @@ export default function ProjectWizard({ initial }) {
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setSheet(data);
     });
+
+  // --- Layer objek alpha (Fase B) ---
+  const uploadLayer = (s, file) => {
+    if (!file) return;
+    call("layer-" + s.id, async () => {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/projects/${id}/scenes/${s.id}/layer`, { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setProject(data.project);
+    });
+  };
+  const genLayer = (s) =>
+    call("layer-" + s.id, async () => {
+      const data = await jsonFetch(`/api/projects/${id}/scenes/${s.id}/layer`, "POST", { prompt: layerPrompt[s.id] ?? s.layer?.prompt ?? "" });
+      setProject(data.project);
+    });
+  const deleteLayer = (s) =>
+    call("layer-" + s.id, async () => {
+      const data = await jsonFetch(`/api/projects/${id}/scenes/${s.id}/layer`, "DELETE");
+      setProject(data.project);
+    });
+  const saveLayerMotion = (s, lm) =>
+    call("layerM-" + s.id, async () => {
+      const data = await jsonFetch(`/api/projects/${id}/scenes/${s.id}/layer`, "PATCH", { layerMotion: lm });
+      setProject(data.project);
+      const fresh = (data.project.scenes || []).find((x) => x.id === s.id);
+      if (fresh) setScenes((prev) => prev.map((x) => (x.id === s.id ? { ...x, layerMotion: fresh.layerMotion } : x)));
+    });
+
+  // --- Editor keyframe motion (Fase B) ---
+  const setMotionPreset = (idx, presetId) => {
+    const cur = scenes[idx].motion;
+    if (presetId === "camera") { editScene(idx, "motion", null); return; }
+    if (presetId === "custom") {
+      editScene(idx, "motion", { preset: "custom", easing: cur?.easing || "linear", keyframes: cur?.keyframes?.length ? cur.keyframes : presetKeyframes("kenburns-in") });
+      return;
+    }
+    editScene(idx, "motion", { preset: presetId, easing: cur?.easing || "linear", keyframes: presetKeyframes(presetId) });
+  };
+  const editKeyframe = (idx, ki, field, value) => {
+    const cur = scenes[idx].motion || { preset: "custom", easing: "linear", keyframes: presetKeyframes("kenburns-in") };
+    editScene(idx, "motion", { ...cur, preset: "custom", keyframes: (cur.keyframes || []).map((k, j) => (j === ki ? { ...k, [field]: value } : k)) });
+  };
+  const addKeyframe = (idx) => {
+    const cur = scenes[idx].motion || { preset: "custom", easing: "linear", keyframes: presetKeyframes("kenburns-in") };
+    const last = cur.keyframes[cur.keyframes.length - 1] || { t: 0, scale: 1, fx: 0.5, fy: 0.5 };
+    editScene(idx, "motion", { ...cur, preset: "custom", keyframes: [...cur.keyframes, { ...last, t: 1 }] });
+  };
+  const removeKeyframe = (idx, ki) => {
+    const cur = scenes[idx].motion;
+    if (!cur) return;
+    editScene(idx, "motion", { ...cur, preset: "custom", keyframes: (cur.keyframes || []).filter((_, j) => j !== ki) });
+  };
 
   const saveDc = () =>
     call("saveDc", async () => {
@@ -1349,7 +1406,48 @@ export default function ProjectWizard({ initial }) {
                       </div>
                     </div>
                   )}
-                  <p className="mt-1 text-xs text-white/40">Storyboard tersimpan otomatis bersama naskah dan tercermin ke storyboard.json. Jenis bidikan masuk ke prompt gambar; gerakan kamera dipakai prompt video Flow dan motion render pada fase berikutnya.</p>
+                  {project.engine === "slides" && (
+                    <div className="mt-2 border-t border-white/10 pt-2">
+                      <span className="text-[11px] font-bold tracking-wide text-sky-200/80">GERAK KAMERA (KEYFRAME)</span>
+                      <div className="mt-1 flex flex-wrap gap-2">
+                        <div>
+                          <label className={labelCls}>Preset gerak</label>
+                          <select value={s.motion?.preset || "camera"} onChange={(e) => setMotionPreset(i, e.target.value)} className={inputCls}>
+                            <option value="camera">Ikuti kamera storyboard</option>
+                            {MOTION_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                            <option value="custom">Kustom (edit keyframe)</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className={labelCls}>Easing</label>
+                          <select value={s.motion?.easing || "linear"} onChange={(e) => editScene(i, "motion", { preset: s.motion?.preset || "custom", keyframes: s.motion?.keyframes?.length ? s.motion.keyframes : presetKeyframes("kenburns-in"), easing: e.target.value })} className={inputCls}>
+                            <option value="linear">Linear</option>
+                            <option value="ease-in-out">Ease in-out (untuk 2 keyframe)</option>
+                          </select>
+                        </div>
+                      </div>
+                      {(s.motion?.keyframes || []).map((k, ki) => (
+                        <div key={ki} className="mt-1 flex flex-wrap items-center gap-1 text-xs text-white/60">
+                          <span className="font-semibold text-white/40">KF {ki + 1}</span>
+                          <span>waktu</span>
+                          <input type="number" min="0" max="100" value={Math.round((k.t ?? 0) * 100)} onChange={(e) => editKeyframe(i, ki, "t", Number(e.target.value) / 100)} className={inputCls} style={{ width: 64 }} />
+                          <span>% · zoom</span>
+                          <input type="number" min="1" max="2.5" step="0.01" value={k.scale} onChange={(e) => editKeyframe(i, ki, "scale", Number(e.target.value))} className={inputCls} style={{ width: 76 }} />
+                          <span>· fokus X</span>
+                          <input type="number" min="0" max="100" value={Math.round((k.fx ?? 0.5) * 100)} onChange={(e) => editKeyframe(i, ki, "fx", Number(e.target.value) / 100)} className={inputCls} style={{ width: 64 }} />
+                          <span>% · Y</span>
+                          <input type="number" min="0" max="100" value={Math.round((k.fy ?? 0.5) * 100)} onChange={(e) => editKeyframe(i, ki, "fy", Number(e.target.value) / 100)} className={inputCls} style={{ width: 64 }} />
+                          <span>%</span>
+                          {(s.motion?.keyframes?.length || 0) > 1 && <button onClick={() => removeKeyframe(i, ki)} className={btnCls}>×</button>}
+                        </div>
+                      ))}
+                      <div className="mt-1 flex gap-1">
+                        <button onClick={() => addKeyframe(i)} disabled={(s.motion?.keyframes?.length || 0) >= 6} className={btnCls}>+ Keyframe</button>
+                        {!s.motion && <span className="self-center text-xs text-white/40">Belum diatur — render mengikuti gerakan kamera storyboard ({s.sb?.camera || "bawaan: zoom perlahan"}).</span>}
+                      </div>
+                    </div>
+                  )}
+                  <p className="mt-1 text-xs text-white/40">Storyboard tersimpan otomatis bersama naskah dan tercermin ke storyboard.json. Jenis bidikan masuk ke prompt gambar; gerakan kamera menjadi gerak render (atau atur keyframe sendiri di atas).</p>
                 </div>
               )}
             </div>
@@ -1537,6 +1635,44 @@ export default function ProjectWizard({ initial }) {
                           {s.video?.status === "ready" ? "Unggah ulang video" : "Unggah video"}
                           <input type="file" accept="video/*" className="hidden" onChange={(e) => uploadAsset(s, "video", e.target.files?.[0])} />
                         </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 rounded-lg border border-white/10 p-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-white/50">Layer objek (PNG transparan — bergerak di atas latar)</div>
+                    <div className="mt-2 flex flex-wrap gap-3">
+                      <div className="relative h-28 w-20 shrink-0 overflow-hidden rounded" style={{ background: "repeating-conic-gradient(#3a3a3a 0% 25%, #262626 0% 50%) 0 0/16px 16px" }}>
+                        {s.layer?.status === "ready" ? (
+                          <img src={assetUrl(s.layer)} alt={`Layer scene ${i + 1}`} className="h-full w-full object-contain" />
+                        ) : s.layer?.status === "generating" ? (
+                          <div className="flex h-full animate-pulse items-center justify-center px-1 text-center text-[11px] text-sky-300">sedang dibuat…</div>
+                        ) : s.layer?.status === "error" ? (
+                          <div className="flex h-full items-center justify-center px-1 text-center text-[11px] text-red-300">gagal: {s.layer.error || "coba lagi"}</div>
+                        ) : (
+                          <div className="flex h-full items-center justify-center px-1 text-center text-[11px] text-white/40">belum ada layer</div>
+                        )}
+                      </div>
+                      <div className="min-w-52 flex-1 space-y-2">
+                        <div className="flex flex-wrap gap-1">
+                          <input value={layerPrompt[s.id] ?? s.layer?.prompt ?? ""} onChange={(e) => setLayerPrompt({ ...layerPrompt, [s.id]: e.target.value })} placeholder="Prompt objek (Inggris), mis. a red vintage telephone booth" className={inputCls} style={{ minWidth: 200, flex: 1 }} />
+                          <button onClick={() => genLayer(s)} disabled={busy === "layer-" + s.id || s.layer?.status === "generating"} className={btnCls}>{s.layer?.status === "ready" ? "Generate ulang + cutout" : "Generate + cutout"}</button>
+                          <label className={btnCls + " cursor-pointer"}>
+                            Unggah PNG
+                            <input type="file" accept="image/png,image/webp,image/jpeg" className="hidden" onChange={(e) => uploadLayer(s, e.target.files?.[0])} />
+                          </label>
+                          {s.layer?.status === "ready" && <button onClick={() => deleteLayer(s)} disabled={busy === "layer-" + s.id} className={btnCls}>Hapus</button>}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-white/50">Gerak layer:</span>
+                          <select value={s.layerMotion?.preset || "diam"} onChange={(e) => saveLayerMotion(s, { preset: e.target.value, scale: s.layerMotion?.scale ?? 0.45 })} className={inputCls} style={{ width: 185 }}>
+                            {LAYER_MOTION_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                          </select>
+                          <span className="text-xs text-white/50">Ukuran:</span>
+                          <select value={String(s.layerMotion?.scale ?? 0.45)} onChange={(e) => saveLayerMotion(s, { preset: s.layerMotion?.preset || "diam", scale: Number(e.target.value) })} className={inputCls} style={{ width: 120 }}>
+                            {[0.25, 0.35, 0.45, 0.6, 0.8].map((v) => <option key={v} value={String(v)}>{Math.round(v * 100)}% lebar</option>)}
+                          </select>
+                        </div>
+                        <p className="text-xs text-white/40">Generate membuat objek di atas latar hijau pekat lalu membuang latarnya otomatis (chromakey). Paling andal: unggah PNG yang memang transparan.</p>
                       </div>
                     </div>
                   </div>
