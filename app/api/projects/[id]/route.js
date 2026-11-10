@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { loadProject, saveProject, deleteProject, mergeScenes, sanitizeCharacters, sanitizeSeries } from "../../../../lib/store.js";
 import { VISUAL_STYLE_IDS } from "../../../../lib/visualStyles.js";
 import { sanitizeAudioConfig } from "../../../../lib/audioPresets.js";
+import { sanitizeSocial } from "../../../../lib/social.js";
 import { sanitizeCaptionStyle } from "../../../../lib/captions.js";
 
 export const dynamic = "force-dynamic";
@@ -51,6 +52,14 @@ export async function PATCH(req, { params }) {
   }
   if (body.captionStyle !== undefined) {
     project.captionStyle = sanitizeCaptionStyle(body.captionStyle);
+  }
+  if (body.social && typeof body.social === "object") {
+    // Paket sosmed: caption + tagar dari klien; thumbnail adalah aset
+    // server dan dipertahankan dari salinan yang tersimpan.
+    project.social = sanitizeSocial(
+      { ...body.social, updatedAt: new Date().toISOString() },
+      project.social?.thumbnail || { status: "none" }
+    );
   }
   if (body.scriptTemplate !== undefined) {
     project.scriptTemplate = body.scriptTemplate === "andai" ? "andai" : "";

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { loadProject, saveProject, projectDir, sweepAssetDir } from "../../../../../../../lib/store.js";
 import { generateImage, generateImageWorkersAI, generateImageVia9Router, generateImageViaBridge, generateImageViaVenice } from "../../../../../../../lib/ai.js";
 import { slidesImagePrompt } from "../../../../../../../lib/visualStyles.js";
+import { effectiveAppearance } from "../../../../../../../lib/characterIdentity.js";
 import { activeSceneJobs, sceneJobKey, SCENE_JOB_STALE_MS } from "../../../../../../../lib/jobs.js";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ async function produceCharacterImage(project, character, providerOverride) {
   const abs = path.join(projectDir(project.id), rel);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   const pseudoScene = {
-    imagePrompt: `character reference portrait: ${character.appearance || character.name}, upper body, facing the camera, neutral expression, plain neutral background, clear detailed face`,
+    imagePrompt: `character reference portrait: ${effectiveAppearance(character) || character.name}, upper body, facing the camera, neutral expression, plain neutral background, clear detailed face`,
     sb: null,
   };
   const prompt = slidesImagePrompt(project, pseudoScene);

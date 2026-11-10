@@ -30,6 +30,16 @@ const DG_COMPS = [["hp", "HP / ponsel"], ["bts", "Menara BTS"], ["server", "Serv
 const DG_FLOWS = [["panas", "Panas (oranye-merah)"], ["aliran", "Aliran (teal)"], ["netral", "Netral (abu)"]];
 const DG_CABLES = [["blue", "Biru (alur normal)"], ["gold", "Emas (data disalin)"], ["red", "Merah (bahaya)"], ["green", "Hijau (aman)"], ["grey", "Abu (netral)"]];
 const DG_STEPS = [["todo", "… belum"], ["ask", "? diproses / ditanya"], ["ok", "✓ selesai / disetujui"], ["bad", "✗ gagal / ditolak"]];
+const ID_FIELDS = [
+  ["age", "Usia (Inggris)", "mis. 8 years old"],
+  ["genderPresentation", "Presentasi gender (Inggris)", "mis. female"],
+  ["face", "Wajah (Inggris)", "mis. round friendly face"],
+  ["hair", "Rambut (Inggris)", "mis. black shoulder-length hair"],
+  ["skinTone", "Warna kulit (Inggris)", "mis. light brown"],
+  ["body", "Tubuh (Inggris)", "mis. small child proportions"],
+  ["outfit", "Pakaian khas (Inggris)", "mis. pink long-sleeve dress"],
+  ["artStyle", "Gaya gambar (Inggris)", "mis. flat 2D cartoon"],
+];
 const ENGINE_LABEL = { darkcard: "Dark Card", slides: "Slides", diagram: "Diagram", editorial: "Editorial" };
 
 function CopyBtn({ text, label }) {
@@ -172,6 +182,15 @@ export default function ProjectWizard({ initial }) {
   const [stickStyle, setStickStyle] = useState(initial.stickStyle || "B1");
   const [audioCfg, setAudioCfg] = useState(initial.audio || audioFromPreset("edukatif"));
   const [chars, setChars] = useState(initial.characters || []);
+  const [social, setSocial] = useState(initial.social || { caption: "", tags: [], thumbnail: { status: "none" } });
+  const [socialTagsText, setSocialTagsText] = useState((initial.social?.tags || []).join(" "));
+  useEffect(() => {
+    const s = project.social;
+    if (!s) return;
+    setSocial((prev) => ({ caption: s.caption || "", tags: s.tags || [], thumbnail: s.thumbnail || prev.thumbnail || { status: "none" } }));
+    setSocialTagsText((s.tags || []).join(" "));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.social?.updatedAt]);
   const [sheet, setSheet] = useState(null);
   const [layerPrompt, setLayerPrompt] = useState({});
   const [visualStyle, setVisualStyle] = useState(initial.visualStyle || "bebas");
@@ -429,9 +448,11 @@ export default function ProjectWizard({ initial }) {
       setChars(data.project.characters || []);
     });
   const addChar = () =>
-    setChars((prev) => [...prev, { id: "tmp-" + Math.random().toString(36).slice(2, 9), name: "", appearance: "", referenceImage: { status: "none" } }]);
+    setChars((prev) => [...prev, { id: "tmp-" + Math.random().toString(36).slice(2, 9), name: "", appearance: "", identity: { age: "", genderPresentation: "", face: "", hair: "", skinTone: "", body: "", outfit: "", accessories: [], artStyle: "" }, identityLocked: false, referenceImage: { status: "none" } }]);
   const editChar = (idx, field, value) =>
     setChars((prev) => prev.map((c, i) => (i === idx ? { ...c, [field]: value } : c)));
+  const editIdentity = (idx, field, value) =>
+    setChars((prev) => prev.map((c, i) => (i === idx ? { ...c, identity: { ...(c.identity || {}), [field]: field === "accessories" ? String(value || "").split(",").map((x) => x.trim()).filter(Boolean) : value } } : c)));
   const removeChar = (idx) => setChars((prev) => prev.filter((_, i) => i !== idx));
   const uploadCharRef = (c, file) => {
     if (!file || !c?.id || c.id.startsWith("tmp-")) return;
@@ -467,6 +488,46 @@ export default function ProjectWizard({ initial }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       setSheet(data);
+    });
+
+  // --- Paket sosmed: thumbnail + caption + tagar (tahap 6) ---
+  const socialCopy = [social.caption?.trim(), (social.tags || []).map((t) => `#${t}`).join(" ")].filter(Boolean).join("\n\n");
+  const saveSocial = () =>
+    call("saveSocial", async () => {
+      const tags = socialTagsText.split(/[\s,]+/).map((t) => t.replace(/^#+/, "")).filter(Boolean);
+      const data = await jsonFetch(`/api/projects/${id}`, "PATCH", { social: { caption: social.caption || "", tags } });
+      setProject(data.project);
+    });
+  const draftSocial = () =>
+    call("draftSocial", async () => {
+      const data = await jsonFetch(`/api/projects/${id}/social`, "POST", {});
+      setProject(data.project);
+    });
+  const composeThumb = () =>
+    call("thumbCompose", async () => {
+      const data = await jsonFetch(`/api/projects/${id}/thumbnail`, "POST", { mode: "compose" });
+      setProject(data.project);
+    });
+  const genThumb = () =>
+    call("thumbGen", async () => {
+      const data = await jsonFetch(`/api/projects/${id}/thumbnail`, "POST", { mode: "generate" });
+      setProject(data.project);
+    });
+  const uploadThumb = (file) => {
+    if (!file) return;
+    call("thumbUp", async () => {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/projects/${id}/thumbnail`, { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      setProject(data.project);
+    });
+  };
+  const deleteThumb = () =>
+    call("thumbDel", async () => {
+      const data = await jsonFetch(`/api/projects/${id}/thumbnail`, "DELETE");
+      setProject(data.project);
     });
 
   // --- Layer objek alpha (Fase B) ---
@@ -1072,6 +1133,29 @@ export default function ProjectWizard({ initial }) {
                         <div>
                           <label className={labelCls}>Penampilan baku (Inggris)</label>
                           <textarea rows={3} value={c.appearance} onChange={(e) => editChar(ci, "appearance", e.target.value)} placeholder="mis. a 58-year-old Indonesian man, round face, short grey hair, glasses, wearing a faded brown batik shirt and dark trousers" className={inputCls} />
+                          <p className="mt-1 text-[11px] text-white/35">Deskripsi legacy — tetap dipakai; prompt dibangun dari identity terstruktur di bawah + teks ini sebagai pelengkap.</p>
+                        </div>
+                        <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+                          <div className="mb-2 flex flex-wrap items-center gap-2">
+                            <span className="text-xs font-bold text-sky-200">Character Identity (terstruktur)</span>
+                            <label className="ml-auto flex cursor-pointer items-center gap-1 text-[11px] text-white/60">
+                              <input type="checkbox" checked={!!c.identityLocked} onChange={(e) => editChar(ci, "identityLocked", e.target.checked)} />
+                              Identity Lock — kunci identity dari perubahan
+                            </label>
+                          </div>
+                          <div className={`grid gap-2 md:grid-cols-2 ${c.identityLocked ? "pointer-events-none opacity-50" : ""}`}>
+                            {ID_FIELDS.map(([f, lbl, ph]) => (
+                              <div key={f}>
+                                <label className={labelCls}>{lbl}</label>
+                                <input value={c.identity?.[f] || ""} onChange={(e) => editIdentity(ci, f, e.target.value)} placeholder={ph} className={inputCls} />
+                              </div>
+                            ))}
+                            <div className="md:col-span-2">
+                              <label className={labelCls}>Aksesori (pisahkan koma)</label>
+                              <input value={(c.identity?.accessories || []).join(", ")} onChange={(e) => editIdentity(ci, "accessories", e.target.value)} placeholder="mis. red ribbon, round glasses" className={inputCls} />
+                            </div>
+                          </div>
+                          {c.identityLocked && <p className="mt-1 text-[11px] text-amber-300/80">Identity terkunci: perubahan field identity tidak akan disimpan server sampai kunci dibuka.</p>}
                         </div>
                         <button onClick={() => removeChar(ci)} className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-500/25">Hapus karakter</button>
                       </div>
@@ -1960,6 +2044,58 @@ export default function ProjectWizard({ initial }) {
         ) : (
           <p className="text-sm text-white/50">Video final belum tersedia. Selesaikan tahap 4 (render final) atau jalankan mode otomatis.</p>
         )}
+        <div className="mt-4 rounded-lg border border-emerald-300/20 bg-emerald-400/5 p-3">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-bold text-emerald-200">Paket Sosmed — Thumbnail, Caption & Tagar</span>
+            <span className="ml-auto flex flex-wrap gap-1">
+              <button onClick={draftSocial} disabled={busy === "draftSocial"} className={btnCls}>{busy === "draftSocial" ? "Menyusun draf..." : "Susun draf caption + tagar (AI)"}</button>
+              <button onClick={saveSocial} disabled={busy === "saveSocial"} className={btnCls}>{busy === "saveSocial" ? "Menyimpan..." : "Simpan caption & tagar"}</button>
+            </span>
+          </div>
+          <p className="mb-2 text-xs text-white/40">Salin paket ini ke YouTube Shorts / TikTok / Reels saat mengunggah video. Mode otomatis menyusun drafnya setelah render final; edit bebas lalu simpan.</p>
+          <div className="flex flex-wrap gap-3">
+            <div className="flex w-28 flex-col items-center gap-1">
+              {social.thumbnail?.status === "ready" ? (
+                <img src={assetUrl(social.thumbnail)} alt="thumbnail" className="w-28 rounded object-cover" style={{ aspectRatio: (project.aspect || "9:16").replace(":", "/") }} />
+              ) : (
+                <div className="flex w-28 items-center justify-center rounded bg-white/5 px-1 text-center text-[11px] text-white/40" style={{ aspectRatio: (project.aspect || "9:16").replace(":", "/") }}>
+                  belum ada thumbnail
+                </div>
+              )}
+              <span className="flex flex-wrap justify-center gap-1">
+                <button onClick={composeThumb} disabled={busy === "thumbCompose"} className={btnCls} title="Susun dari gambar scene pertama + judul proyek">Susun</button>
+                <button onClick={genThumb} disabled={busy === "thumbGen"} className={btnCls} title="Buat gambar thumbnail via penyedia gambar proyek">Generate</button>
+                <label className={btnCls + " cursor-pointer"}>
+                  Unggah
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => uploadThumb(e.target.files?.[0])} />
+                </label>
+                {social.thumbnail?.status === "ready" && (
+                  <>
+                    <a href={assetUrl(social.thumbnail)} download className={btnCls}>Unduh</a>
+                    <button onClick={deleteThumb} disabled={busy === "thumbDel"} className={btnCls}>Hapus</button>
+                  </>
+                )}
+              </span>
+            </div>
+            <div className="min-w-52 flex-1 space-y-2">
+              <div>
+                <label className={labelCls}>Caption</label>
+                <textarea rows={5} value={social.caption || ""} onChange={(e) => setSocial((prev) => ({ ...prev, caption: e.target.value }))} placeholder="Draf caption untuk postingan..." className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Tagar (pisahkan spasi/koma, tanpa #)</label>
+                <input value={socialTagsText} onChange={(e) => setSocialTagsText(e.target.value)} placeholder="mis. shorts edukasi sains" className={inputCls} />
+              </div>
+              <div className="rounded-lg border border-white/10 bg-black/30 p-2">
+                <div className="mb-1 flex items-center gap-2">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-white/50">Teks siap salin (caption + tagar)</span>
+                  <span className="ml-auto"><CopyBtn text={socialCopy} label="Salin semua" /></span>
+                </div>
+                <pre className="max-h-36 overflow-auto whitespace-pre-wrap text-xs text-white/70">{socialCopy || "— caption/tagar masih kosong —"}</pre>
+              </div>
+            </div>
+          </div>
+        </div>
       </Section>
     </div>
   );
